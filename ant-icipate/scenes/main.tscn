@@ -1,0 +1,8 @@
+[gd_scene format=3 uid="uid://m0kiktvkuiyr"]
+
+[ext_resource type="PackedScene" uid="uid://bg748ng8nu5yn" path="res://scenes/ant_leader.tscn" id="1_o5qli"]
+
+[node name="Main" type="Node2D" unique_id=1787259563]
+
+[node name="Ant_leader" parent="." unique_id=1506983490 instance=ExtResource("1_o5qli")]
+position = Vector2(563, 341)
