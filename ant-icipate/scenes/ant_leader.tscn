@@ -1,0 +1,19 @@
+[gd_scene format=3 uid="uid://bg748ng8nu5yn"]
+
+[ext_resource type="Script" uid="uid://kogqxoro7ctd" path="res://scripts/ant_leader.gd" id="1_ybn63"]
+[ext_resource type="Texture2D" uid="uid://d2rhl62u8luks" path="res://icon.svg" id="2_cjlpn"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_68yga"]
+radius = 31.06445
+
+[node name="Ant_leader" type="CharacterBody2D" unique_id=1506983490]
+script = ExtResource("1_ybn63")
+
+[node name="Sprite2D" type="Sprite2D" parent="." unique_id=1326260948]
+position = Vector2(0, -33)
+scale = Vector2(0.5, 0.5)
+texture = ExtResource("2_cjlpn")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=1584586649]
+position = Vector2(0, -30)
+shape = SubResource("CircleShape2D_68yga")
