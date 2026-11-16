@@ -1,12 +1,11 @@
 extends CharacterBody2D
 
 @export var speed: float = 400.0
+@export var acceleration: float = 2000.0
+@export var friction: float = 2500.0
 
-func _physics_process(_delta: float) -> void:
-	var input_vector := Input.get_vector("Left", "Right", "Up", "Down")
-	#if input_vector != Vector2.ZERO:
-		#print("Karakter sedang bergerak ke arah: ", input_vector)
-	#else:
-		#print("Karakter diam (Idle)")
-	velocity = input_vector * speed
+func _physics_process(delta: float) -> void:
+	var input := Input.get_vector("Left", "Right", "Up", "Down")
+	var rate := acceleration if input else friction
+	velocity = velocity.move_toward(input * speed, rate * delta)
 	move_and_slide()
