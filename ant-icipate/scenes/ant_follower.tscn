@@ -1,0 +1,21 @@
+[gd_scene format=3 uid="uid://daheniun45xih"]
+
+[ext_resource type="Script" uid="uid://b4o25nyt0n1r7" path="res://ant_follower.gd" id="1_xvavd"]
+[ext_resource type="Texture2D" uid="uid://d2rhl62u8luks" path="res://icon.svg" id="2_nja82"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_68yga"]
+radius = 62.289646
+
+[node name="Ant_follower" type="Area2D" unique_id=606158279]
+script = ExtResource("1_xvavd")
+follow_distance = 128.0
+
+[node name="Sprite2D" type="Sprite2D" parent="." unique_id=466855707]
+position = Vector2(0, -33)
+scale = Vector2(0.5, 0.5)
+texture = ExtResource("2_nja82")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=858513878]
+position = Vector2(0, -33)
+scale = Vector2(0.5, 0.5)
+shape = SubResource("CircleShape2D_68yga")

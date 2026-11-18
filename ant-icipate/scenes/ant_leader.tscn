@@ -2,12 +2,14 @@
 
 [ext_resource type="Script" uid="uid://kogqxoro7ctd" path="res://scripts/ant_leader.gd" id="1_ybn63"]
 [ext_resource type="Texture2D" uid="uid://d2rhl62u8luks" path="res://icon.svg" id="2_cjlpn"]
+[ext_resource type="PackedScene" uid="uid://daheniun45xih" path="res://scenes/ant_follower.tscn" id="2_g8mh1"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_68yga"]
 radius = 31.06445
 
 [node name="Ant_leader" type="CharacterBody2D" unique_id=1506983490]
 script = ExtResource("1_ybn63")
+follower_scene = ExtResource("2_g8mh1")
 
 [node name="Sprite2D" type="Sprite2D" parent="." unique_id=1326260948]
 position = Vector2(0, -33)
@@ -17,3 +19,9 @@ texture = ExtResource("2_cjlpn")
 [node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=1584586649]
 position = Vector2(0, -30)
 shape = SubResource("CircleShape2D_68yga")
+
+[node name="Camera2D" type="Camera2D" parent="." unique_id=1166363298]
+position = Vector2(0, -30)
+zoom = Vector2(0.8, 0.8)
+position_smoothing_enabled = true
+position_smoothing_speed = 6.0
