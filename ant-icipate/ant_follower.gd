@@ -5,6 +5,10 @@ extends Area2D
 @export var move_speed: float = 400.0
 @export var turn_speed: float = 12.0
 
+@export var shadow_offset: Vector2 = Vector2(5, 8)
+@onready var sprite: Sprite2D = $Sprite2D
+@onready var shadow: Sprite2D = $Shadow
+
 var target: Node2D = null
 var position_history: Array[Vector2] = []
 
@@ -30,6 +34,8 @@ func _physics_process(delta: float) -> void:
 		var direction := global_position.direction_to(delayed_target_pos)
 		rotation = lerp_angle(rotation, direction.angle(), turn_speed * delta)
 		global_position = global_position.move_toward(delayed_target_pos, move_speed * delta)
+
+	shadow.global_position = sprite.global_position + shadow_offset
 
 func set_target(new_target: Node2D) -> void:
 	target = new_target
