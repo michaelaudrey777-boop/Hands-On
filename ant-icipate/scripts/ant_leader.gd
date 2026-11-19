@@ -10,6 +10,10 @@ extends CharacterBody2D
 @export var starting_followers: int = 3
 @export var max_followers: int = 10
 
+@export var shadow_offset: Vector2 = Vector2(8,12)
+@onready var sprite: Sprite2D = $Sprite2D
+@onready var shadow: Sprite2D = $Shadow
+
 var followers: Array[Node2D] = []
 
 func _ready() -> void:
@@ -22,6 +26,8 @@ func _physics_process(delta: float) -> void:
 
 	if velocity.length() > 10.0:
 		rotation = lerp_angle(rotation, velocity.angle(), turn_speed * delta)
+
+	shadow.global_position = sprite.global_position + shadow_offset
 
 	move_and_slide()
 

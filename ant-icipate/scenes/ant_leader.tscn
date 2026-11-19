@@ -10,6 +10,13 @@ radius = 31.06445
 [node name="Ant_leader" type="CharacterBody2D" unique_id=1506983490]
 script = ExtResource("1_ybn63")
 follower_scene = ExtResource("2_g8mh1")
+shadow_offset = Vector2(4, 33)
+
+[node name="Shadow" type="Sprite2D" parent="." unique_id=81208844]
+modulate = Color(0, 0, 0, 0.3529412)
+position = Vector2(0, -33)
+scale = Vector2(0.5, 0.5)
+texture = ExtResource("2_cjlpn")
 
 [node name="Sprite2D" type="Sprite2D" parent="." unique_id=1326260948]
 position = Vector2(0, -33)

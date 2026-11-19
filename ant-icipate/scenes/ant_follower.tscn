@@ -8,7 +8,13 @@ radius = 62.289646
 
 [node name="Ant_follower" type="Area2D" unique_id=606158279]
 script = ExtResource("1_xvavd")
-follow_distance = 128.0
+shadow_offset = Vector2(4, 33)
+
+[node name="Shadow" type="Sprite2D" parent="." unique_id=894866759]
+modulate = Color(0, 0, 0, 0.3529412)
+position = Vector2(0, -33)
+scale = Vector2(0.5, 0.5)
+texture = ExtResource("2_nja82")
 
 [node name="Sprite2D" type="Sprite2D" parent="." unique_id=466855707]
 position = Vector2(0, -33)
