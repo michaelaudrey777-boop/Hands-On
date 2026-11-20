@@ -5,6 +5,12 @@ extends Node2D
 @export var initial_spawn_delay: float = 15.0
 @export var spawn_interval: float = 10.0
 
+@export_group("Round Loop & Ant Dens")
+@export var ant_dens: Array[Area2D] = []
+@export var round_max_items: Array[int] = [10, 15, 20]
+@export var round_spawn_mins: Array[Vector2] = []
+@export var round_spawn_maxs: Array[Vector2] = []
+
 @export_group("Item Spawn Settings")
 @export var item_scene: PackedScene
 @export var initial_item_delay: float = 3.0
@@ -13,23 +19,20 @@ extends Node2D
 @export var min_item_distance_from_leader: float = 600.0
 @export var min_distance_between_items: float = 350.0
 
-@export_group("Spawn Area & Distribution")
+@export_group("Default Spawn Area & Distribution")
 @export var spawn_area_min: Vector2 = Vector2(100, 100)
 @export var spawn_area_max: Vector2 = Vector2(1800, 1000)
 @export var grid_columns: int = 4
 @export var grid_rows: int = 3
 @export var min_distance_from_leader: float = 300.0
 
-@export_group("UI & Quota")
-@export var food_quota: int = 5
-@export var water_quota: int = 3
 @onready var status_label: Label = get_node_or_null("HUD/StatusLabel")
 
 const ITEM_CATALOG: Array[Dictionary] = [
 	{
 		"name": "Bread Crumb",
 		"weight": 1,
-		"food": 1,
+		"food": 3,
 		"water": 0,
 		"score": 3,
 		"color": Color(0.95, 0.75, 0.35),
@@ -39,15 +42,15 @@ const ITEM_CATALOG: Array[Dictionary] = [
 		"name": "Water Droplet",
 		"weight": 2,
 		"food": 0,
-		"water": 1,
+		"water": 3,
 		"score": 4,
 		"color": Color(0.30, 0.75, 1.00),
-		"spawn_weight": 30
+		"spawn_weight": 35
 	},
 	{
 		"name": "Fruit Piece",
 		"weight": 10,
-		"food": 2,
+		"food": 4,
 		"water": 2,
 		"score": 12,
 		"color": Color(0.90, 0.25, 0.35),
@@ -60,18 +63,24 @@ const ITEM_CATALOG: Array[Dictionary] = [
 		"water": 0,
 		"score": 25,
 		"color": Color(0.95, 0.95, 1.00),
-		"spawn_weight": 9
+		"spawn_weight": 6
 	},
 	{
 		"name": "Meat",
 		"weight": 80,
 		"food": 8,
-		"water": 0,
+		"water": 3,
 		"score": 35,
 		"color": Color(0.75, 0.20, 0.20),
 		"spawn_weight": 4
 	}
 ]
+
+var current_round: int = 1
+var total_points: int = 0
+var food_quota: int = 32
+var water_quota: int = 21
+var game_finished: bool = false
 
 var ui_followers: int = 3
 var ui_max_followers: int = 5
@@ -80,6 +89,7 @@ var ui_max_capacity: int = 32
 var ui_food: int = 0
 var ui_water: int = 0
 var ui_overweight: bool = false
+var hud_alert_message: String = ""
 
 var available_follower_cells: Array[Vector2i] = []
 var available_item_cells: Array[Vector2i] = []
@@ -90,10 +100,12 @@ func _ready() -> void:
 			leader.inventory_updated.connect(_on_inventory_updated)
 		if leader.has_signal("squad_updated"):
 			leader.squad_updated.connect(_on_squad_updated)
-	_refresh_hud()
 
-	_refill_cells(available_follower_cells)
-	_refill_cells(available_item_cells)
+	for den in ant_dens:
+		if den != null and den.has_signal("den_reached"):
+			den.den_reached.connect(_on_den_reached)
+
+	_setup_round(1)
 
 	_start_item_spawn_loop()
 
@@ -108,6 +120,86 @@ func _ready() -> void:
 	follower_timer.autostart = true
 	follower_timer.timeout.connect(_on_spawn_timer_timeout)
 	add_child(follower_timer)
+
+func _setup_round(round_num: int) -> void:
+	current_round = round_num
+	var idx := round_num - 1
+
+	for i in range(ant_dens.size()):
+		var den := ant_dens[i]
+		if den == null:
+			continue
+		if i < idx:
+			den.set_den_state(false, true)
+		elif i == idx:
+			den.set_den_state(true, false)
+			food_quota = den.get("required_food")
+			water_quota = den.get("required_water")
+		else:
+			den.set_den_state(false, false)
+
+	if idx >= 0 and idx < round_max_items.size():
+		max_items_on_map = round_max_items[idx]
+
+	if idx >= 0 and idx < round_spawn_mins.size() and idx < round_spawn_maxs.size():
+		spawn_area_min = round_spawn_mins[idx]
+		spawn_area_max = round_spawn_maxs[idx]
+
+	_refill_cells(available_follower_cells)
+	_refill_cells(available_item_cells)
+	_refresh_hud()
+
+func _on_den_reached(den: Area2D, leader_body: Node2D) -> void:
+	if game_finished:
+		return
+
+	var current_food: int = leader_body.get_total_food()
+	var current_water: int = leader_body.get_total_water()
+	var req_food: int = den.get("required_food")
+	var req_water: int = den.get("required_water")
+
+	if current_food < req_food or current_water < req_water:
+		_show_hud_alert("Kuota belum cukup! Butuh %d Food & %d Water." % [req_food, req_water], 3.5)
+		return
+
+	var deposit: Dictionary = leader_body.deposit_all_items()
+	var surplus_food: int = max(0, deposit["food"] - req_food)
+	var surplus_water: int = max(0, deposit["water"] - req_water)
+	var surviving_ants: int = leader_body.followers.size()
+
+	var earned_points: int = (
+		deposit["base_score"] +
+		(surplus_food * 10) +
+		(surplus_water * 10) +
+		(surviving_ants * 5)
+	)
+	total_points += earned_points
+
+	print("=== %s SELESAI! Poin didapat: +%d (Surplus Food: %d, Surplus Water: %d) | Total Poin: %d ===" % [
+		den.get("den_name"), earned_points, surplus_food, surplus_water, total_points
+	])
+
+	if current_round < ant_dens.size():
+		var upgrade_msg := ""
+		if leader_body.has_method("apply_random_upgrade"):
+			upgrade_msg = leader_body.apply_random_upgrade()
+
+		_setup_round(current_round + 1)
+		_show_hud_alert("ROUND %d SELESAI! (+%d Poin)\nUpgrade Acak: %s" % [current_round - 1, earned_points, upgrade_msg], 5.0)
+	else:
+		game_finished = true
+		den.set_den_state(false, true)
+		_show_hud_alert("SEMUA ANT DEN SELESAI! Total Poin Akhir: %d" % total_points, 999.0)
+
+func _show_hud_alert(msg: String, duration: float) -> void:
+	hud_alert_message = msg
+	_refresh_hud()
+
+	if duration < 900.0:
+		await get_tree().create_timer(duration).timeout
+		if hud_alert_message == msg:
+			hud_alert_message = ""
+			_refresh_hud()
 
 func _start_item_spawn_loop() -> void:
 	await get_tree().create_timer(initial_item_delay).timeout
@@ -130,7 +222,7 @@ func _refill_cells(cells_pool: Array[Vector2i]) -> void:
 	cells_pool.shuffle()
 
 func _on_spawn_timer_timeout() -> void:
-	if follower_scene == null:
+	if follower_scene == null or game_finished:
 		return
 
 	var current_count := get_tree().get_nodes_in_group("followers").size()
@@ -142,13 +234,8 @@ func _on_spawn_timer_timeout() -> void:
 	wild_follower.global_position = _get_follower_spawn_position()
 	add_child(wild_follower)
 
-	var waktu_spawn := Time.get_ticks_msec() / 1000.0
-	var pos := wild_follower.global_position
-	var urutan := current_count + 1
-	print("[%.1f detik] AntFollower #%d spawn di koordinat: (%.0f, %.0f)" % [waktu_spawn, urutan, pos.x, pos.y])
-
 func _on_item_spawn_timer_timeout() -> void:
-	if item_scene == null:
+	if item_scene == null or game_finished:
 		return
 
 	var current_items := get_tree().get_nodes_in_group("items").size()
@@ -165,12 +252,6 @@ func _on_item_spawn_timer_timeout() -> void:
 	if new_item.has_method("apply_data"):
 		new_item.apply_data(item_data)
 	add_child(new_item)
-
-	var waktu_spawn := Time.get_ticks_msec() / 1000.0
-	var jarak := leader.global_position.distance_to(spawn_pos) if leader != null else 0.0
-	print("[%.1f detik] Item '%s' (%d CC) spawn di (%.0f, %.0f) | Jarak dari Leader: %.0f px" % [
-		waktu_spawn, item_data["name"], item_data["weight"], spawn_pos.x, spawn_pos.y, jarak
-	])
 
 func _pick_random_item_data() -> Dictionary:
 	var total_weight := 0
@@ -274,8 +355,10 @@ func _refresh_hud() -> void:
 	if status_label == null:
 		return
 	var warning := " [OVERWEIGHT -90% SPEED!]" if ui_overweight else ""
+	var alert_line := ("\n>>> %s <<<" % hud_alert_message) if hud_alert_message != "" else ""
 	status_label.text = (
+		"ROUND %d / %d  |  Poin: %d\n" % [current_round, ant_dens.size(), total_points] +
 		"Semut Follower: %d / %d\n" % [ui_followers, ui_max_followers] +
 		"Kapasitas: %d / %d CC%s\n" % [ui_weight, ui_max_capacity, warning] +
-		"Food: %d / %d  |  Water: %d / %d" % [ui_food, food_quota, ui_water, water_quota]
+		"Food: %d / %d  |  Water: %d / %d%s" % [ui_food, food_quota, ui_water, water_quota, alert_line]
 	)

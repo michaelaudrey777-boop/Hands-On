@@ -1,0 +1,23 @@
+[gd_scene format=3 uid="uid://b7ktcttu0c236"]
+
+[ext_resource type="Script" uid="uid://tyg5ro3limeb" path="res://scripts/ant_nest.gd" id="1_7cyob"]
+[ext_resource type="Texture2D" uid="uid://d2rhl62u8luks" path="res://icon.svg" id="2_64ggm"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_68yga"]
+radius = 90.0
+
+[node name="AntNest" type="Area2D" unique_id=913425769]
+script = ExtResource("1_7cyob")
+
+[node name="Sprite2D" type="Sprite2D" parent="." unique_id=2130641740]
+scale = Vector2(1.5, 1.5)
+texture = ExtResource("2_64ggm")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=19768923]
+shape = SubResource("CircleShape2D_68yga")
+
+[node name="InfoLabel" type="Label" parent="." unique_id=1957494669]
+offset_left = -80.0
+offset_top = -130.0
+offset_right = -40.0
+offset_bottom = -107.0
