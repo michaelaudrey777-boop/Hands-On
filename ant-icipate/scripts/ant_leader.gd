@@ -86,11 +86,23 @@ func get_huddle_position(follower: Node2D, radius: float) -> Vector2:
 	var angle := (TAU / float(total)) * float(index)
 	return global_position + Vector2.from_angle(angle) * radius
 
-func upgrade_max_followers(bonus: int = 2) -> void:
-	max_followers += bonus
-	_emit_status()
+func apply_random_upgrade() -> String:
+	var choice := randi() % 3
+	var result_text := ""
 
-# --- SISTEM INVENTORY & CARRY CAPACITY ---
+	match choice:
+		0:
+			max_followers += 2
+			result_text = "+2 Max Ant Follower (Maks: %d)" % max_followers
+		1:
+			capacity_per_ant += 2
+			result_text = "+2 Carry Capacity/Semut (%d CC/semut)" % capacity_per_ant
+		2:
+			speed += 60.0
+			result_text = "+Movement Speed (Speed: %.0f)" % speed
+
+	_emit_status()
+	return result_text
 
 func get_max_capacity() -> int:
 	var total_ants := followers.size() + (1 if include_leader_in_capacity else 0)
@@ -154,16 +166,28 @@ func try_pickup_item() -> void:
 	nearby_items.erase(closest_item)
 	closest_item.queue_free()
 
-	print("Mengambil %s (%d CC). Total muatan: %d/%d CC" % [
-		item_data["name"], item_data["weight"], get_current_weight(), get_max_capacity()
-	])
 	_emit_status()
+
+func deposit_all_items() -> Dictionary:
+	var deposited_food := get_total_food()
+	var deposited_water := get_total_water()
+	var base_score := 0
+	for item in carried_items:
+		base_score += item["score"]
+
+	carried_items.clear()
+	_emit_status()
+
+	return {
+		"food": deposited_food,
+		"water": deposited_water,
+		"base_score": base_score
+	}
 
 func drop_heaviest_items_until_fit() -> void:
 	while is_overweight() and not carried_items.is_empty():
 		carried_items.sort_custom(func(a, b): return a["weight"] > b["weight"])
 		var dropped: Dictionary = carried_items.pop_front()
-		print("Kapasitas berkurang! Menjatuhkan item terberat: ", dropped["name"])
 
 		if item_scene != null:
 			var dropped_node := item_scene.instantiate() as Area2D
