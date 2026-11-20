@@ -3,11 +3,22 @@
 [ext_resource type="Script" uid="uid://b41t4037rjk05" path="res://scenes/main.gd" id="1_0wfyh"]
 [ext_resource type="PackedScene" uid="uid://bg748ng8nu5yn" path="res://scenes/ant_leader.tscn" id="1_o5qli"]
 [ext_resource type="PackedScene" uid="uid://daheniun45xih" path="res://scenes/ant_follower.tscn" id="3_sugp2"]
+[ext_resource type="PackedScene" uid="uid://dne3un4efkfjf" path="res://scenes/scavenge_item.tscn" id="4_jyhfs"]
 
 [node name="Main" type="Node2D" unique_id=1787259563 node_paths=PackedStringArray("leader")]
 script = ExtResource("1_0wfyh")
 follower_scene = ExtResource("3_sugp2")
-leader = NodePath("Ant_leader")
+leader = NodePath("AntLeader")
+item_scene = ExtResource("4_jyhfs")
 
-[node name="Ant_leader" parent="." unique_id=1506983490 instance=ExtResource("1_o5qli")]
+[node name="AntLeader" parent="." unique_id=1506983490 instance=ExtResource("1_o5qli")]
 position = Vector2(563, 341)
+item_scene = ExtResource("4_jyhfs")
+
+[node name="HUD" type="CanvasLayer" parent="." unique_id=1823060854]
+
+[node name="StatusLabel" type="Label" parent="HUD" unique_id=1401316127]
+offset_left = 20.0
+offset_top = 20.0
+offset_right = 60.0
+offset_bottom = 43.0
