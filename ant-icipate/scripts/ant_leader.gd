@@ -33,8 +33,14 @@ func _ready() -> void:
 	_emit_status.call_deferred()
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_E:
-		try_pickup_item()
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_E:
+			try_pickup_item()
+		elif event.keycode == KEY_Q:
+			drop_last_item()
+		elif event.keycode == KEY_K and OS.is_debug_build():
+			if not followers.is_empty():
+				remove_follower(followers.back())
 
 func _physics_process(delta: float) -> void:
 	is_huddling = Input.is_key_pressed(KEY_SPACE)
@@ -76,6 +82,21 @@ func recruit_follower(follower: Node2D) -> void:
 	followers.append(follower)
 	follower.set_target(target_node, self)
 	_emit_status()
+
+func remove_follower(follower: Node2D) -> void:
+	var idx := followers.find(follower)
+	if idx == -1:
+		return
+
+	var new_target: Node2D = self if idx == 0 else followers[idx - 1]
+	followers.remove_at(idx)
+	if idx < followers.size():
+		followers[idx].set_target(new_target, self)
+
+	if is_instance_valid(follower):
+		follower.queue_free()
+
+	drop_heaviest_items_until_fit()
 
 func get_huddle_position(follower: Node2D, radius: float) -> Vector2:
 	var index := followers.find(follower)
@@ -165,6 +186,23 @@ func try_pickup_item() -> void:
 	carried_items.append(item_data)
 	nearby_items.erase(closest_item)
 	closest_item.queue_free()
+
+	_emit_status()
+
+func drop_last_item() -> void:
+	if carried_items.is_empty():
+		return
+	if item_scene == null:
+		push_warning("Item Scene di Inspector AntLeader masih kosong!")
+		return
+
+	var dropped: Dictionary = carried_items.pop_back()
+
+	var dropped_node := item_scene.instantiate() as Area2D
+	dropped_node.global_position = global_position - Vector2.from_angle(rotation) * 80.0
+	if dropped_node.has_method("apply_data"):
+		dropped_node.apply_data(dropped)
+	get_parent().add_child.call_deferred(dropped_node)
 
 	_emit_status()
 
