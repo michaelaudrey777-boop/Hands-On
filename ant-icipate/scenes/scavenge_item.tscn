@@ -1,0 +1,25 @@
+[gd_scene format=3 uid="uid://dne3un4efkfjf"]
+
+[ext_resource type="Script" uid="uid://8torbsfnmmxq" path="res://scripts/scavenge_item.gd" id="1_60iq6"]
+[ext_resource type="Texture2D" uid="uid://d2rhl62u8luks" path="res://icon.svg" id="2_5hoou"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_68yga"]
+radius = 35.0
+
+[node name="ScavengeItem" type="Area2D" unique_id=888377966]
+script = ExtResource("1_60iq6")
+
+[node name="Sprite2D" type="Sprite2D" parent="." unique_id=2114558659]
+scale = Vector2(0.35, 0.35)
+texture = ExtResource("2_5hoou")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=467750573]
+shape = SubResource("CircleShape2D_68yga")
+
+[node name="PromptLabel" type="Label" parent="." unique_id=1936861461]
+visible = false
+offset_left = -30.0
+offset_top = -45.0
+offset_right = 31.0
+offset_bottom = -22.0
+text = "[E] Take"

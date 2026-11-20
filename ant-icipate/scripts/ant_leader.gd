@@ -1,5 +1,8 @@
 extends CharacterBody2D
 
+signal inventory_updated(current_weight: int, max_capacity: int, food: int, water: int, is_overweight: bool)
+signal squad_updated(current_followers: int, max_followers: int)
+
 @export var speed: float = 400.0
 @export var acceleration: float = 2000.0
 @export var friction: float = 2500.0
@@ -12,23 +15,40 @@ extends CharacterBody2D
 @export var starting_followers: int = 3
 @export var max_followers: int = 5
 
+@export_group("Carry Capacity Settings")
+@export var item_scene: PackedScene
+@export var capacity_per_ant: int = 8
+@export var include_leader_in_capacity: bool = true
+
 @onready var sprite: Sprite2D = $Sprite2D
 @onready var shadow: Sprite2D = $Shadow
 
 var followers: Array[Node2D] = []
 var is_huddling: bool = false
+var carried_items: Array[Dictionary] = []
+var nearby_items: Array[Area2D] = []
 
 func _ready() -> void:
 	spawn_initial_followers()
+	_emit_status.call_deferred()
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_E:
+		try_pickup_item()
 
 func _physics_process(delta: float) -> void:
 	is_huddling = Input.is_key_pressed(KEY_SPACE)
 
 	var input := Input.get_vector("Left", "Right", "Up", "Down")
 	var rate := acceleration if input else friction
-	var current_speed := speed * (huddle_speed_multiplier if is_huddling else 1.0)
 
-	velocity = velocity.move_toward(input * current_speed, rate * delta)
+	var speed_multiplier := 1.0
+	if is_huddling:
+		speed_multiplier *= huddle_speed_multiplier
+	if is_overweight():
+		speed_multiplier *= 0.1
+
+	velocity = velocity.move_toward(input * (speed * speed_multiplier), rate * delta)
 
 	if velocity.length() > 10.0:
 		rotation = lerp_angle(rotation, velocity.angle(), turn_speed * delta)
@@ -55,6 +75,7 @@ func recruit_follower(follower: Node2D) -> void:
 	var target_node: Node2D = self if followers.is_empty() else followers.back()
 	followers.append(follower)
 	follower.set_target(target_node, self)
+	_emit_status()
 
 func get_huddle_position(follower: Node2D, radius: float) -> Vector2:
 	var index := followers.find(follower)
@@ -67,3 +88,98 @@ func get_huddle_position(follower: Node2D, radius: float) -> Vector2:
 
 func upgrade_max_followers(bonus: int = 2) -> void:
 	max_followers += bonus
+	_emit_status()
+
+# --- SISTEM INVENTORY & CARRY CAPACITY ---
+
+func get_max_capacity() -> int:
+	var total_ants := followers.size() + (1 if include_leader_in_capacity else 0)
+	return total_ants * capacity_per_ant
+
+func get_current_weight() -> int:
+	var total := 0
+	for item in carried_items:
+		total += item["weight"]
+	return total
+
+func get_total_food() -> int:
+	var total := 0
+	for item in carried_items:
+		total += item["food"]
+	return total
+
+func get_total_water() -> int:
+	var total := 0
+	for item in carried_items:
+		total += item["water"]
+	return total
+
+func is_overweight() -> bool:
+	return get_current_weight() > get_max_capacity()
+
+func register_nearby_item(item: Area2D) -> void:
+	if item not in nearby_items:
+		nearby_items.append(item)
+
+func unregister_nearby_item(item: Area2D) -> void:
+	nearby_items.erase(item)
+
+func try_pickup_item() -> void:
+	nearby_items = nearby_items.filter(func(i): return is_instance_valid(i))
+	if nearby_items.is_empty():
+		return
+
+	if is_overweight():
+		print("Overweight! Tidak bisa mengambil barang lagi.")
+		return
+
+	var closest_item: Area2D = nearby_items[0]
+	var closest_dist := global_position.distance_to(closest_item.global_position)
+	for item in nearby_items:
+		var d := global_position.distance_to(item.global_position)
+		if d < closest_dist:
+			closest_dist = d
+			closest_item = item
+
+	var item_data := {
+		"name": closest_item.get("item_name"),
+		"weight": closest_item.get("weight"),
+		"food": closest_item.get("food_value"),
+		"water": closest_item.get("water_value"),
+		"score": closest_item.get("score_value"),
+		"color": closest_item.get("item_color")
+	}
+
+	carried_items.append(item_data)
+	nearby_items.erase(closest_item)
+	closest_item.queue_free()
+
+	print("Mengambil %s (%d CC). Total muatan: %d/%d CC" % [
+		item_data["name"], item_data["weight"], get_current_weight(), get_max_capacity()
+	])
+	_emit_status()
+
+func drop_heaviest_items_until_fit() -> void:
+	while is_overweight() and not carried_items.is_empty():
+		carried_items.sort_custom(func(a, b): return a["weight"] > b["weight"])
+		var dropped: Dictionary = carried_items.pop_front()
+		print("Kapasitas berkurang! Menjatuhkan item terberat: ", dropped["name"])
+
+		if item_scene != null:
+			var dropped_node := item_scene.instantiate() as Area2D
+			dropped_node.global_position = global_position + Vector2(randf_range(-25, 25), randf_range(-25, 25))
+			if dropped_node.has_method("apply_data"):
+				dropped_node.apply_data(dropped)
+			get_parent().add_child.call_deferred(dropped_node)
+
+	_emit_status()
+
+func _emit_status() -> void:
+	inventory_updated.emit(
+		get_current_weight(),
+		get_max_capacity(),
+		get_total_food(),
+		get_total_water(),
+		is_overweight()
+	)
+	squad_updated.emit(followers.size(), max_followers)
