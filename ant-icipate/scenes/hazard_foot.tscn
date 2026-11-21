@@ -1,0 +1,7 @@
+[gd_scene format=3 uid="uid://dx7ha1hcs67fp"]
+
+[ext_resource type="Script" uid="uid://dqtpeigyvfp1y" path="res://scripts/hazard_foot.gd" id="1_5aeo8"]
+
+[node name="HazardFoot" type="Node2D" unique_id=759087941]
+script = ExtResource("1_5aeo8")
+radius = 250.0

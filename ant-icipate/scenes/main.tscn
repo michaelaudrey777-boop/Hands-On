@@ -4,6 +4,7 @@
 [ext_resource type="PackedScene" uid="uid://bg748ng8nu5yn" path="res://scenes/ant_leader.tscn" id="1_o5qli"]
 [ext_resource type="PackedScene" uid="uid://daheniun45xih" path="res://scenes/ant_follower.tscn" id="3_sugp2"]
 [ext_resource type="PackedScene" uid="uid://dne3un4efkfjf" path="res://scenes/scavenge_item.tscn" id="4_jyhfs"]
+[ext_resource type="PackedScene" uid="uid://dx7ha1hcs67fp" path="res://scenes/hazard_foot.tscn" id="4_tefeu"]
 [ext_resource type="PackedScene" uid="uid://b7ktcttu0c236" path="res://scenes/ant_nest.tscn" id="5_tbgi4"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_d0nb3"]
@@ -20,6 +21,7 @@ ant_dens = [NodePath("AntDen1"), NodePath("AntDen2"), NodePath("AntDen3")]
 round_spawn_mins = Array[Vector2]([Vector2(303, -1568), Vector2(1762, -1597), Vector2(3366, -1351)])
 round_spawn_maxs = Array[Vector2]([Vector2(2210, 484), Vector2(3655, 405), Vector2(4775, 224)])
 item_scene = ExtResource("4_jyhfs")
+foot_scene = ExtResource("4_tefeu")
 
 [node name="AntLeader" parent="." unique_id=1506983490 instance=ExtResource("1_o5qli")]
 position = Vector2(569, 280)
