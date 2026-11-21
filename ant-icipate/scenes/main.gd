@@ -32,7 +32,7 @@ const ITEM_CATALOG: Array[Dictionary] = [
 	{
 		"name": "Bread Crumb",
 		"weight": 1,
-		"food": 3,
+		"food": 2,
 		"water": 0,
 		"score": 3,
 		"color": Color(0.95, 0.75, 0.35),
@@ -50,29 +50,31 @@ const ITEM_CATALOG: Array[Dictionary] = [
 	{
 		"name": "Fruit Piece",
 		"weight": 10,
-		"food": 4,
-		"water": 2,
+		"food": 16,
+		"water": 12,
 		"score": 12,
 		"color": Color(0.90, 0.25, 0.35),
 		"spawn_weight": 15
 	},
 	{
 		"name": "Sugar Cube",
-		"weight": 60,
-		"food": 6,
+		"weight": 45,
+		"food": 60,
 		"water": 0,
 		"score": 25,
 		"color": Color(0.95, 0.95, 1.00),
-		"spawn_weight": 6
+		"spawn_weight": 6,
+		"max_on_map": 1
 	},
 	{
 		"name": "Meat",
-		"weight": 80,
-		"food": 8,
+		"weight": 60,
+		"food": 80,
 		"water": 3,
 		"score": 35,
 		"color": Color(0.75, 0.20, 0.20),
-		"spawn_weight": 4
+		"spawn_weight": 4,
+		"max_on_map": 1
 	}
 ]
 
@@ -245,7 +247,7 @@ func _on_item_spawn_timer_timeout() -> void:
 	var spawn_pos := _get_spaced_item_position()
 	if spawn_pos == Vector2.INF:
 		return
-
+	
 	var item_data := _pick_random_item_data()
 	var new_item := item_scene.instantiate() as Area2D
 	new_item.global_position = spawn_pos
@@ -253,19 +255,40 @@ func _on_item_spawn_timer_timeout() -> void:
 		new_item.apply_data(item_data)
 	add_child(new_item)
 
+func _count_item_in_play(item_name: String) -> int:
+	var count := 0
+	for item in get_tree().get_nodes_in_group("items"):
+		if is_instance_valid(item) and item.get("item_name") == item_name:
+			count += 1
+
+	if leader != null:
+		var carried = leader.get("carried_items")
+		if carried != null:
+			for c in carried:
+				if c["name"] == item_name:
+					count += 1
+	return count
+
 func _pick_random_item_data() -> Dictionary:
+	var pool: Array[Dictionary] = []
 	var total_weight := 0
 	for entry in ITEM_CATALOG:
+		if entry.has("max_on_map") and _count_item_in_play(entry["name"]) >= entry["max_on_map"]:
+			continue
+		pool.append(entry)
 		total_weight += entry["spawn_weight"]
+
+	if pool.is_empty():
+		return ITEM_CATALOG[0]
 
 	var roll := randi_range(1, total_weight)
 	var cumulative := 0
-	for entry in ITEM_CATALOG:
+	for entry in pool:
 		cumulative += entry["spawn_weight"]
 		if roll <= cumulative:
 			return entry
 
-	return ITEM_CATALOG[0]
+	return pool[0]
 
 func _get_follower_spawn_position() -> Vector2:
 	var cell_size := Vector2(
