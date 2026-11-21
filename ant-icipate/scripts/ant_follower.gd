@@ -56,11 +56,10 @@ func _physics_process(delta: float) -> void:
 
 			if dist > 4.0:
 				var dir := global_position.direction_to(circle_pos)
-				rotation = lerp_angle(rotation, dir.angle(), turn_speed * delta)
+				_face(dir)
 				global_position = global_position.move_toward(circle_pos, huddle_move_speed * delta)
 			else:
 				global_position = circle_pos
-				rotation = lerp_angle(rotation, leader_ref.rotation, turn_speed * delta)
 		else:
 			position_history.append(line_target.global_position)
 
@@ -70,7 +69,7 @@ func _physics_process(delta: float) -> void:
 
 				if global_position.distance_to(delayed_target_pos) > follow_distance + 0.5:
 					var direction := global_position.direction_to(delayed_target_pos)
-					rotation = lerp_angle(rotation, direction.angle(), turn_speed * delta)
+					_face(direction)
 					global_position = global_position.move_toward(delayed_target_pos, move_speed * delta)
 
 	shadow.global_position = sprite.global_position + shadow_offset
@@ -86,3 +85,8 @@ func set_target(new_target: Node2D, leader: Node2D = null) -> void:
 func _on_body_entered(body: Node2D) -> void:
 	if line_target == null and can_be_recruited and body.has_method("recruit_follower"):
 		body.recruit_follower(self)
+
+func _face(dir: Vector2) -> void:
+	if absf(dir.x) > 0.1:
+		sprite.flip_h = dir.x < 0.0
+		shadow.flip_h = sprite.flip_h

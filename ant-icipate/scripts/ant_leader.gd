@@ -7,6 +7,7 @@ signal squad_updated(current_followers: int, max_followers: int)
 @export var acceleration: float = 2000.0
 @export var friction: float = 2500.0
 @export var turn_speed: float = 12.0
+@export var turn_acceleration: float = 6000.0
 @export var huddle_speed_multiplier: float = 0.5
 @export var shadow_offset: Vector2 = Vector2(5, 8)
 
@@ -27,6 +28,7 @@ var followers: Array[Node2D] = []
 var is_huddling: bool = false
 var carried_items: Array[Dictionary] = []
 var nearby_items: Array[Area2D] = []
+var facing: Vector2 = Vector2.RIGHT
 
 func _ready() -> void:
 	spawn_initial_followers()
@@ -47,6 +49,8 @@ func _physics_process(delta: float) -> void:
 
 	var input := Input.get_vector("Left", "Right", "Up", "Down")
 	var rate := acceleration if input else friction
+	if input and velocity.dot(input) < 0.0:
+		rate = turn_acceleration  # braking against the current direction: brake hard
 
 	var speed_multiplier := 1.0
 	if is_huddling:
@@ -56,11 +60,18 @@ func _physics_process(delta: float) -> void:
 
 	velocity = velocity.move_toward(input * (speed * speed_multiplier), rate * delta)
 
-	if velocity.length() > 10.0:
-		rotation = lerp_angle(rotation, velocity.angle(), turn_speed * delta)
+	if input:
+		facing = input.normalized()
+		if absf(input.x) > 0.1:
+			sprite.flip_h = input.x < 0.0
+			shadow.flip_h = sprite.flip_h
 
 	move_and_slide()
 	shadow.global_position = sprite.global_position + shadow_offset
+	shadow.texture = sprite.texture
+	shadow.frame = sprite.frame
+	shadow.hframes = sprite.hframes
+	shadow.vframes = sprite.vframes
 
 func spawn_initial_followers() -> void:
 	if follower_scene == null:
@@ -199,7 +210,7 @@ func drop_last_item() -> void:
 	var dropped: Dictionary = carried_items.pop_back()
 
 	var dropped_node := item_scene.instantiate() as Area2D
-	dropped_node.global_position = global_position - Vector2.from_angle(rotation) * 80.0
+	dropped_node.global_position = global_position - facing * 80.0
 	if dropped_node.has_method("apply_data"):
 		dropped_node.apply_data(dropped)
 	get_parent().add_child.call_deferred(dropped_node)
