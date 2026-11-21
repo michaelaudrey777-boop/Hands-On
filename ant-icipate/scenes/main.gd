@@ -54,7 +54,8 @@ const ITEM_CATALOG: Array[Dictionary] = [
 		"water": 12,
 		"score": 12,
 		"color": Color(0.90, 0.25, 0.35),
-		"spawn_weight": 15
+		"spawn_weight": 15,
+		"max_on_map": 5
 	},
 	{
 		"name": "Sugar Cube",
