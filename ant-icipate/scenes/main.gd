@@ -28,6 +28,13 @@ extends Node2D
 
 @onready var status_label: Label = get_node_or_null("HUD/StatusLabel")
 
+@export_group("Hazard Settings")
+@export var foot_scene: PackedScene
+@export var initial_hazard_delay: float = 20.0
+@export var hazard_interval: float = 20.0
+@export var hazard_spawn_range: float = 1200.0
+@export var target_squad_chance: float = 0.5
+
 const ITEM_CATALOG: Array[Dictionary] = [
 	{
 		"name": "Bread Crumb",
@@ -111,6 +118,7 @@ func _ready() -> void:
 	_setup_round(1)
 
 	_start_item_spawn_loop()
+	_start_hazard_loop()
 
 	await get_tree().create_timer(initial_spawn_delay).timeout
 	if not is_inside_tree():
@@ -386,3 +394,34 @@ func _refresh_hud() -> void:
 		"Kapasitas: %d / %d CC%s\n" % [ui_weight, ui_max_capacity, warning] +
 		"Food: %d / %d  |  Water: %d / %d%s" % [ui_food, food_quota, ui_water, water_quota, alert_line]
 	)
+
+func _start_hazard_loop() -> void:
+	await get_tree().create_timer(initial_hazard_delay).timeout
+	while is_inside_tree() and not game_finished:
+		_spawn_foot()
+		# hazards scale up each nest: less wait every round, min 5 sec
+		var wait := maxf(5.0, hazard_interval - (current_round - 1) * 5.0)
+		await get_tree().create_timer(wait).timeout
+
+func _spawn_foot() -> void:
+	if foot_scene == null or leader == null:
+		return
+	var foot := foot_scene.instantiate() as Node2D
+	foot.leader = leader
+	foot.global_position = _get_foot_position()
+	add_child(foot)
+
+func _get_foot_position() -> Vector2:
+	var squad: Array = leader.get("followers")
+	if not squad.is_empty() and randf() < target_squad_chance:
+		return squad.pick_random().global_position
+
+	var targets: Array = []
+	for item in get_tree().get_nodes_in_group("items"):
+		if is_instance_valid(item) and item.global_position.distance_to(leader.global_position) <= hazard_spawn_range:
+			targets.append(item)
+
+	var base: Vector2 = leader.global_position
+	if not targets.is_empty():
+		base = targets.pick_random().global_position
+	return base + Vector2(randf_range(-120, 120), randf_range(-120, 120))
