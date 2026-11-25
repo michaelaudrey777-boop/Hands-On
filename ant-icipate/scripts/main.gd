@@ -7,9 +7,14 @@ extends Node2D
 
 @export_group("Round Loop & Ant Dens")
 @export var ant_dens: Array[Area2D] = []
+@export var round_start_markers: Array[Marker2D] = []
 @export var round_max_items: Array[int] = [10, 15, 20]
 @export var round_spawn_mins: Array[Vector2] = []
 @export var round_spawn_maxs: Array[Vector2] = []
+
+@export_group("Round Borders")
+@export var forward_borders: Array[StaticBody2D] = []
+@export var backward_borders: Array[StaticBody2D] = []
 
 @export_group("Item Spawn Settings")
 @export var item_scene: PackedScene
@@ -156,9 +161,71 @@ func _setup_round(round_num: int) -> void:
 		spawn_area_min = round_spawn_mins[idx]
 		spawn_area_max = round_spawn_maxs[idx]
 
+	# Bersihkan follower liar yang belum direkrut di zona ronde sebelumnya agar kuota spawn tetap jalan
+	if round_num > 1:
+		for f in get_tree().get_nodes_in_group("followers"):
+			if is_instance_valid(f) and f.get("line_target") == null:
+				f.queue_free()
+
+	# Teleport pemain & seluruh barisan ke titik awal ronde baru
+	if leader != null and idx >= 0 and idx < round_start_markers.size():
+		var marker := round_start_markers[idx]
+		if marker != null:
+			if leader.has_method("teleport_squad"):
+				leader.teleport_squad(marker.global_position)
+			else:
+				leader.global_position = marker.global_position
+
+	_update_round_borders(round_num)
+
 	_refill_cells(available_follower_cells)
 	_refill_cells(available_item_cells)
 	_refresh_hud()
+
+func _update_round_borders(round_num: int) -> void:
+	var idx := round_num - 1
+
+	# Dinding pembatas antar-zona tetap aktif terus:
+	# - Sebelum teleport: menahan pemain maju ke zona ronde berikutnya
+	# - Sesudah teleport melewati border: menahan pemain kembali ke zona ronde sebelumnya
+	for i in range(forward_borders.size()):
+		var border := forward_borders[i]
+		if border != null:
+			_set_border_active(border, true)
+
+	for i in range(backward_borders.size()):
+		var border := backward_borders[i]
+		if border != null:
+			_set_border_active(border, i < idx)
+
+func _set_border_active(border: StaticBody2D, active: bool) -> void:
+	border.visible = active
+	if border.collision_layer == 0:
+		border.collision_layer = 1
+
+	var found_shape := false
+	for child in border.get_children():
+		if child is CollisionShape2D:
+			found_shape = true
+			if child.shape == null:
+				var rect := RectangleShape2D.new()
+				rect.size = Vector2(40, 2450)
+				child.shape = rect
+			elif child.shape is RectangleShape2D and child.shape.size == Vector2.ZERO:
+				child.shape.size = Vector2(40, 2450)
+			child.set_deferred("disabled", not active)
+		elif child is CollisionPolygon2D:
+			found_shape = true
+			child.set_deferred("disabled", not active)
+
+	if not found_shape:
+		var auto_col := CollisionShape2D.new()
+		auto_col.name = "AutoCollisionShape"
+		var rect := RectangleShape2D.new()
+		rect.size = Vector2(40, 2450)
+		auto_col.shape = rect
+		auto_col.disabled = not active
+		border.add_child(auto_col)
 
 func _on_den_reached(den: Area2D, leader_body: Node2D) -> void:
 	if game_finished:
@@ -399,7 +466,6 @@ func _start_hazard_loop() -> void:
 	await get_tree().create_timer(initial_hazard_delay).timeout
 	while is_inside_tree() and not game_finished:
 		_spawn_foot()
-		# hazards scale up each nest: less wait every round, min 5 sec
 		var wait := maxf(5.0, hazard_interval - (current_round - 1) * 5.0)
 		await get_tree().create_timer(wait).timeout
 

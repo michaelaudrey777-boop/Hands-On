@@ -82,6 +82,11 @@ func set_target(new_target: Node2D, leader: Node2D = null) -> void:
 	position_history.clear()
 	modulate = Color.WHITE
 
+func reset_follow_history() -> void:
+	position_history.clear()
+	if is_node_ready():
+		shadow.global_position = sprite.global_position + shadow_offset
+
 func _on_body_entered(body: Node2D) -> void:
 	if line_target == null and can_be_recruited and body.has_method("recruit_follower"):
 		body.recruit_follower(self)
