@@ -50,7 +50,7 @@ func _physics_process(delta: float) -> void:
 	var input := Input.get_vector("Left", "Right", "Up", "Down")
 	var rate := acceleration if input else friction
 	if input and velocity.dot(input) < 0.0:
-		rate = turn_acceleration  # braking against the current direction: brake hard
+		rate = turn_acceleration
 
 	var speed_multiplier := 1.0
 	if is_huddling:
@@ -72,6 +72,22 @@ func _physics_process(delta: float) -> void:
 	shadow.frame = sprite.frame
 	shadow.hframes = sprite.hframes
 	shadow.vframes = sprite.vframes
+
+func teleport_squad(target_pos: Vector2) -> void:
+	global_position = target_pos
+	velocity = Vector2.ZERO
+	shadow.global_position = sprite.global_position + shadow_offset
+
+	for i in range(followers.size()):
+		var f := followers[i]
+		if is_instance_valid(f):
+			f.global_position = target_pos + Vector2(0, (i + 1) * 35.0)
+			if f.has_method("reset_follow_history"):
+				f.reset_follow_history()
+
+	var cam := get_node_or_null("Camera2D") as Camera2D
+	if cam != null:
+		cam.reset_smoothing()
 
 func spawn_initial_followers() -> void:
 	if follower_scene == null:
