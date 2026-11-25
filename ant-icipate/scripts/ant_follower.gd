@@ -62,6 +62,8 @@ func _physics_process(delta: float) -> void:
 		if huddling and leader_ref.has_method("get_huddle_position"):
 			var circle_pos: Vector2 = leader_ref.get_huddle_position(self, huddle_radius)
 			var dist := global_position.distance_to(circle_pos)
+			var leader_velocity: Vector2 = leader_ref.get("velocity") if leader_ref.get("velocity") != null else Vector2.ZERO
+			var leader_moving := leader_velocity.length() > 15.0
 
 			if dist > 4.0:
 				var dir := global_position.direction_to(circle_pos)
@@ -70,6 +72,9 @@ func _physics_process(delta: float) -> void:
 				is_moving = true
 			else:
 				global_position = circle_pos
+				if leader_moving:
+					_face(leader_velocity)
+					is_moving = true
 		else:
 			position_history.append(line_target.global_position)
 

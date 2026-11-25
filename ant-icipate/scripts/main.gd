@@ -41,7 +41,7 @@ extends Node2D
 @onready var status_label: Label = get_node_or_null("HUD/StatusLabel")
 @onready var closing_fog: Node2D = get_node_or_null("ClosingFog")
 
-@export_group("Hazard Settings")
+@export_group("Hazard Foot Settings")
 @export var foot_scene: PackedScene
 @export var foot_textures: Array[Texture2D] = []
 @export var initial_hazard_delay: float = 6.0
@@ -51,6 +51,14 @@ extends Node2D
 @export var target_ants_chance: float = 0.55
 @export var den_safe_radius: float = 450.0
 @export var min_distance_between_hazards: float = 220.0
+
+@export_group("Hazard Hand Settings")
+@export var hand_scene: PackedScene
+@export var charge_hand_texture: Texture2D
+@export var sweep_hand_texture: Texture2D
+@export var initial_hand_delay: float = 12.0
+@export var round_hand_intervals: Array[float] = [16.0, 12.0, 8.5]
+@export var hand_interval_fallback: float = 9.0
 
 const ITEM_CATALOG: Array[Dictionary] = [
 	{
@@ -128,6 +136,8 @@ var available_follower_cells: Array[Vector2i] = []
 var available_item_cells: Array[Vector2i] = []
 
 func _ready() -> void:
+	_auto_recover_missing_references()
+
 	if leader != null:
 		if leader.has_signal("inventory_updated"):
 			leader.inventory_updated.connect(_on_inventory_updated)
@@ -149,6 +159,7 @@ func _ready() -> void:
 
 	_start_item_spawn_loop()
 	_start_hazard_loop()
+	_start_hand_loop()
 
 	await get_tree().create_timer(initial_spawn_delay).timeout
 	if not is_inside_tree():
@@ -161,6 +172,56 @@ func _ready() -> void:
 	follower_timer.autostart = true
 	follower_timer.timeout.connect(_on_spawn_timer_timeout)
 	add_child(follower_timer)
+
+func _auto_recover_missing_references() -> void:
+	if leader == null:
+		leader = get_node_or_null("AntLeader")
+
+	if ant_dens.is_empty():
+		var found_dens: Array[Area2D] = []
+		for node in find_children("*", "Area2D", true, false):
+			if node.get("required_food") != null:
+				found_dens.append(node as Area2D)
+		found_dens.sort_custom(func(a: Node, b: Node) -> bool: return a.name.naturalnocasecmp_to(b.name) < 0)
+		ant_dens = found_dens
+
+	if round_start_markers.is_empty():
+		var found_markers: Array[Marker2D] = []
+		for node in find_children("*", "Marker2D", true, false):
+			if "Start" in node.name or "Round" in node.name:
+				found_markers.append(node as Marker2D)
+		found_markers.sort_custom(func(a: Node, b: Node) -> bool: return a.name.naturalnocasecmp_to(b.name) < 0)
+		round_start_markers = found_markers
+
+	if forward_borders.is_empty():
+		var found_borders: Array[StaticBody2D] = []
+		for node in find_children("*", "StaticBody2D", true, false):
+			if "Border" in node.name:
+				found_borders.append(node as StaticBody2D)
+		found_borders.sort_custom(func(a: Node, b: Node) -> bool: return a.name.naturalnocasecmp_to(b.name) < 0)
+		forward_borders = found_borders
+
+	if round_spawn_mins.is_empty() and round_spawn_maxs.is_empty():
+		round_spawn_mins = [Vector2(350, -7650), Vector2(8350, -7650), Vector2(16350, -7650)]
+		round_spawn_maxs = [Vector2(7650, 650), Vector2(15650, 650), Vector2(23650, 650)]
+
+	if follower_scene == null:
+		follower_scene = _try_load_scene(["res://scenes/ant_follower.tscn", "res://ant_follower.tscn"])
+
+	if item_scene == null:
+		item_scene = _try_load_scene(["res://scenes/scavenge_item.tscn", "res://scenes/item.tscn", "res://scavenge_item.tscn", "res://item.tscn"])
+
+	if foot_scene == null:
+		foot_scene = _try_load_scene(["res://scenes/hazard_foot.tscn", "res://hazard_foot.tscn"])
+
+	if hand_scene == null:
+		hand_scene = _try_load_scene(["res://scenes/hazard_hand.tscn", "res://hazard_hand.tscn"])
+
+func _try_load_scene(paths: Array[String]) -> PackedScene:
+	for p in paths:
+		if ResourceLoader.exists(p):
+			return load(p) as PackedScene
+	return null
 
 func _unhandled_input(event: InputEvent) -> void:
 	if (is_game_over or game_finished) and event is InputEventKey and event.pressed and not event.echo:
@@ -570,6 +631,57 @@ func _spawn_foot() -> void:
 
 	foot.global_position = foot_pos
 	add_child(foot)
+
+func _start_hand_loop() -> void:
+	await get_tree().create_timer(initial_hand_delay).timeout
+	while is_inside_tree() and not game_finished and not is_game_over:
+		_spawn_hand()
+		var idx := current_round - 1
+		var wait := hand_interval_fallback
+		if idx >= 0 and idx < round_hand_intervals.size():
+			wait = round_hand_intervals[idx]
+		elif not round_hand_intervals.is_empty():
+			wait = round_hand_intervals.back()
+		await get_tree().create_timer(maxf(3.0, wait)).timeout
+
+func _spawn_hand() -> void:
+	if hand_scene == null or leader == null or leader.get("is_dead") == true:
+		return
+
+	var hand_pos := _get_hand_position()
+	if hand_pos == Vector2.INF:
+		return
+
+	var hand := hand_scene.instantiate() as Node2D
+	hand.add_to_group("hazards")
+	hand.leader = leader
+	if charge_hand_texture != null:
+		hand.set("charge_hand_texture", charge_hand_texture)
+	if sweep_hand_texture != null:
+		hand.set("sweep_hand_texture", sweep_hand_texture)
+	hand.global_position = hand_pos
+	add_child(hand)
+
+func _get_hand_position() -> Vector2:
+	var candidates: Array[Vector2] = []
+	if not _is_in_safe_zone(leader.global_position):
+		candidates.append(leader.global_position)
+
+	var squad: Array = leader.get("followers")
+	for f in squad:
+		if is_instance_valid(f) and not _is_in_safe_zone(f.global_position):
+			candidates.append(f.global_position)
+
+	if candidates.is_empty():
+		return Vector2.INF
+
+	for i in range(12):
+		var base: Vector2 = candidates.pick_random()
+		var pos := base + Vector2(randf_range(-140.0, 140.0), randf_range(-55.0, 55.0))
+		if not _is_in_safe_zone(pos):
+			return pos
+
+	return Vector2.INF
 
 func _is_in_safe_zone(pos: Vector2) -> bool:
 	if closing_fog != null and closing_fog.has_method("is_in_fog") and closing_fog.is_in_fog(pos, 100.0):

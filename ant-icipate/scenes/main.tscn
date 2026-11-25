@@ -2,9 +2,18 @@
 
 [ext_resource type="Script" uid="uid://b41t4037rjk05" path="res://scripts/main.gd" id="1_0wfyh"]
 [ext_resource type="PackedScene" uid="uid://bg748ng8nu5yn" path="res://scenes/ant_leader.tscn" id="1_o5qli"]
+[ext_resource type="PackedScene" uid="uid://daheniun45xih" path="res://scenes/ant_follower.tscn" id="2_muem4"]
+[ext_resource type="Texture2D" uid="uid://iwdbbkys4v4y" path="res://assets/resources/resource_Bread.png" id="4_dp3eg"]
 [ext_resource type="PackedScene" uid="uid://dne3un4efkfjf" path="res://scenes/scavenge_item.tscn" id="4_jyhfs"]
+[ext_resource type="Texture2D" uid="uid://b572ul1fkj2wp" path="res://assets/resources/resource_Water.png" id="5_0ld40"]
+[ext_resource type="PackedScene" uid="uid://bbfpdth4335gp" path="res://scenes/hazard_hand.tscn" id="5_choun"]
 [ext_resource type="PackedScene" uid="uid://b7ktcttu0c236" path="res://scenes/ant_nest.tscn" id="5_tbgi4"]
+[ext_resource type="Texture2D" uid="uid://bnoogxgdhlvhk" path="res://assets/resources/resource_Fruit.png" id="6_gqmmt"]
+[ext_resource type="Texture2D" uid="uid://c7cx1u6kntdwd" path="res://assets/hazards/arm.png" id="6_ya4ey"]
+[ext_resource type="Texture2D" uid="uid://coy7dx8mhwgsd" path="res://assets/resources/resource_Sugar.png" id="7_yc10j"]
+[ext_resource type="Texture2D" uid="uid://q0cltde4ss7l" path="res://assets/resources/resource_Meat1.png" id="8_jscy8"]
 [ext_resource type="Script" uid="uid://v5pbtmoomxu5" path="res://scripts/closing_fog.gd" id="8_tipki"]
+[ext_resource type="Texture2D" uid="uid://cpjtyiwwy1kix" path="res://assets/resources/resource_Meat2.png" id="9_pm3ni"]
 [ext_resource type="Texture2D" uid="uid://n7lfykogwfuo" path="res://assets/hazards/foot_green.png" id="10_eb6dy"]
 [ext_resource type="Texture2D" uid="uid://cxkw7ol5mngb" path="res://assets/hazards/foot_blue (1).png" id="11_jbj1t"]
 [ext_resource type="Texture2D" uid="uid://j8hg6uwe5yl3" path="res://assets/hazards/foot_coolerred.png" id="12_muem4"]
@@ -33,9 +42,24 @@ size = Vector2(24400, 200)
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_5t25c"]
 size = Vector2(24400, 200)
 
-[node name="Main" type="Node2D" unique_id=1787259563]
+[node name="Main" type="Node2D" unique_id=1787259563 node_paths=PackedStringArray("leader", "ant_dens", "round_start_markers", "forward_borders")]
 script = ExtResource("1_0wfyh")
+follower_scene = ExtResource("2_muem4")
+leader = NodePath("AntLeader")
+ant_dens = [NodePath("AntDen1"), NodePath("AntDen2"), NodePath("AntDen3")]
+round_start_markers = [null, NodePath("Spawn_Round2"), NodePath("Spawn_Round3")]
+round_spawn_mins = Array[Vector2]([Vector2(350, -7650), Vector2(8350, -7650), Vector2(16350, -7650)])
+round_spawn_maxs = Array[Vector2]([Vector2(7650, 650), Vector2(15650, 650), Vector2(23650, 650)])
+forward_borders = [NodePath("RoundBorders/Border_R1_to_R2"), NodePath("RoundBorders/Border_R2_to_R3")]
+item_scene = ExtResource("4_jyhfs")
+tex_bread_crumb = ExtResource("4_dp3eg")
+tex_water_droplet = ExtResource("5_0ld40")
+tex_fruit_piece = ExtResource("6_gqmmt")
+tex_sugar_cube = ExtResource("7_yc10j")
+tex_meat_variants = Array[Texture2D]([ExtResource("8_jscy8"), ExtResource("9_pm3ni")])
 foot_textures = Array[Texture2D]([ExtResource("11_jbj1t"), ExtResource("12_muem4"), ExtResource("10_eb6dy")])
+hand_scene = ExtResource("5_choun")
+hand_texture = ExtResource("6_ya4ey")
 
 [node name="AntLeader" parent="." unique_id=1506983490 instance=ExtResource("1_o5qli")]
 position = Vector2(600, 450)
