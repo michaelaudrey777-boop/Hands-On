@@ -1,7 +1,11 @@
 [gd_scene format=3 uid="uid://dx7ha1hcs67fp"]
 
-[ext_resource type="Script" uid="uid://dqtpeigyvfp1y" path="res://scripts/hazard_foot.gd" id="1_5aeo8"]
+[ext_resource type="Script" uid="uid://uvdtovvxhhao" path="res://scripts/hazard_foot.gd" id="1_5aeo8"]
+[ext_resource type="Texture2D" uid="uid://bec0x2jck7ebv" path="res://assets/hazards/foot_shadow.png" id="2_0hrdb"]
 
 [node name="HazardFoot" type="Node2D" unique_id=759087941]
 script = ExtResource("1_5aeo8")
 radius = 250.0
+shadow_texture = ExtResource("2_0hrdb")
+shadow_offset = Vector2(0, 33)
+shadow_visual_scale_multiplier = 1.15

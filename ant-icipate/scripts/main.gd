@@ -2,13 +2,14 @@ extends Node2D
 
 @export var follower_scene: PackedScene
 @export var leader: Node2D
-@export var initial_spawn_delay: float = 15.0
-@export var spawn_interval: float = 10.0
+@export var initial_spawn_delay: float = 8.0
+@export var spawn_interval: float = 9.0
 
 @export_group("Round Loop & Ant Dens")
 @export var ant_dens: Array[Area2D] = []
 @export var round_start_markers: Array[Marker2D] = []
-@export var round_max_items: Array[int] = [10, 15, 20]
+@export var round_max_items: Array[int] = [30, 40, 50]
+@export var initial_round_items: int = 18
 @export var round_spawn_mins: Array[Vector2] = []
 @export var round_spawn_maxs: Array[Vector2] = []
 
@@ -17,36 +18,38 @@ extends Node2D
 
 @export_group("Item Spawn Settings")
 @export var item_scene: PackedScene
-@export var initial_item_delay: float = 3.0
-@export var item_spawn_interval: float = 9.0
-@export var max_items_on_map: int = 10
-@export var min_item_distance_from_leader: float = 600.0
-@export var min_distance_between_items: float = 350.0
+@export var initial_item_delay: float = 2.0
+@export var item_spawn_interval: float = 4.5
+@export var max_items_on_map: int = 30
+@export var min_item_distance_from_leader: float = 700.0
+@export var min_distance_between_items: float = 650.0
 
 @export_group("Item Sprites")
 @export var tex_bread_crumb: Texture2D
 @export var tex_water_droplet: Texture2D
 @export var tex_fruit_piece: Texture2D
 @export var tex_sugar_cube: Texture2D
-@export var tex_meat: Texture2D
+@export var tex_meat_variants: Array[Texture2D] = []
 
 @export_group("Default Spawn Area & Distribution")
-@export var spawn_area_min: Vector2 = Vector2(100, 100)
-@export var spawn_area_max: Vector2 = Vector2(1800, 1000)
-@export var grid_columns: int = 4
-@export var grid_rows: int = 3
-@export var min_distance_from_leader: float = 300.0
+@export var spawn_area_min: Vector2 = Vector2(350, -7650)
+@export var spawn_area_max: Vector2 = Vector2(7650, 650)
+@export var grid_columns: int = 6
+@export var grid_rows: int = 6
+@export var min_distance_from_leader: float = 450.0
 
 @onready var status_label: Label = get_node_or_null("HUD/StatusLabel")
 
 @export_group("Hazard Settings")
 @export var foot_scene: PackedScene
-@export var foot_texture: Texture2D
-@export var initial_hazard_delay: float = 20.0
-@export var hazard_interval: float = 20.0
-@export var hazard_spawn_range: float = 1200.0
-@export var target_squad_chance: float = 0.5
-@export var den_safe_radius: float = 420.0
+@export var foot_textures: Array[Texture2D] = []
+@export var initial_hazard_delay: float = 6.0
+@export var round_hazard_intervals: Array[float] = [8.5, 5.5, 3.5]
+@export var hazard_interval_fallback: float = 4.0
+@export var hazard_spawn_range: float = 2200.0
+@export var target_ants_chance: float = 0.55
+@export var den_safe_radius: float = 450.0
+@export var min_distance_between_hazards: float = 220.0
 
 const ITEM_CATALOG: Array[Dictionary] = [
 	{
@@ -78,7 +81,7 @@ const ITEM_CATALOG: Array[Dictionary] = [
 		"color": Color(0.90, 0.25, 0.35),
 		"size_multiplier": 1.0,
 		"spawn_weight": 15,
-		"max_on_map": 5
+		"max_on_map": 8
 	},
 	{
 		"name": "Sugar Cube",
@@ -89,7 +92,7 @@ const ITEM_CATALOG: Array[Dictionary] = [
 		"color": Color(0.95, 0.95, 1.00),
 		"size_multiplier": 1.0,
 		"spawn_weight": 6,
-		"max_on_map": 1
+		"max_on_map": 2
 	},
 	{
 		"name": "Meat",
@@ -100,7 +103,7 @@ const ITEM_CATALOG: Array[Dictionary] = [
 		"color": Color(0.75, 0.20, 0.20),
 		"size_multiplier": 1.0,
 		"spawn_weight": 4,
-		"max_on_map": 1
+		"max_on_map": 2
 	}
 ]
 
@@ -192,6 +195,9 @@ func _setup_round(round_num: int) -> void:
 		for f in get_tree().get_nodes_in_group("followers"):
 			if is_instance_valid(f) and f.get("line_target") == null:
 				f.queue_free()
+		for item in get_tree().get_nodes_in_group("items"):
+			if is_instance_valid(item):
+				item.queue_free()
 
 	if leader != null and idx >= 0 and idx < round_start_markers.size():
 		var marker := round_start_markers[idx]
@@ -202,7 +208,13 @@ func _setup_round(round_num: int) -> void:
 
 	_refill_cells(available_follower_cells)
 	_refill_cells(available_item_cells)
+	_populate_initial_round_items.call_deferred()
 	_refresh_hud()
+
+func _populate_initial_round_items() -> void:
+	var target_count := mini(initial_round_items, max_items_on_map)
+	for i in range(target_count):
+		_on_item_spawn_timer_timeout()
 
 func _activate_round_borders() -> void:
 	for border in forward_borders:
@@ -328,7 +340,9 @@ func _get_item_texture(item_name: String) -> Texture2D:
 		"Sugar Cube":
 			return tex_sugar_cube
 		"Meat":
-			return tex_meat
+			var valid_meats := tex_meat_variants.filter(func(t): return t != null)
+			if not valid_meats.is_empty():
+				return valid_meats.pick_random()
 	return null
 
 func _count_item_in_play(item_name: String) -> int:
@@ -466,8 +480,13 @@ func _start_hazard_loop() -> void:
 	await get_tree().create_timer(initial_hazard_delay).timeout
 	while is_inside_tree() and not game_finished and not is_game_over:
 		_spawn_foot()
-		var wait := maxf(5.0, hazard_interval - (current_round - 1) * 5.0)
-		await get_tree().create_timer(wait).timeout
+		var idx := current_round - 1
+		var wait := hazard_interval_fallback
+		if idx >= 0 and idx < round_hazard_intervals.size():
+			wait = round_hazard_intervals[idx]
+		elif not round_hazard_intervals.is_empty():
+			wait = round_hazard_intervals.back()
+		await get_tree().create_timer(maxf(2.0, wait)).timeout
 
 func _spawn_foot() -> void:
 	if foot_scene == null or leader == null or leader.get("is_dead") == true:
@@ -478,9 +497,11 @@ func _spawn_foot() -> void:
 		return
 
 	var foot := foot_scene.instantiate() as Node2D
+	foot.add_to_group("hazards")
 	foot.leader = leader
-	if foot_texture != null:
-		foot.set("foot_texture", foot_texture)
+	var valid_feet := foot_textures.filter(func(t): return t != null)
+	if not valid_feet.is_empty():
+		foot.set("foot_texture", valid_feet.pick_random())
 	foot.global_position = foot_pos
 	add_child(foot)
 
@@ -493,29 +514,48 @@ func _is_in_safe_zone(pos: Vector2) -> bool:
 		if is_instance_valid(marker) and pos.distance_to(marker.global_position) < den_safe_radius:
 			return true
 
+	for h in get_tree().get_nodes_in_group("hazards"):
+		if is_instance_valid(h) and pos.distance_to(h.global_position) < min_distance_between_hazards:
+			return true
+
 	return false
 
 func _get_foot_position() -> Vector2:
-	var squad: Array = leader.get("followers").duplicate()
-	if not squad.is_empty() and randf() < target_squad_chance:
-		squad.shuffle()
-		for f in squad:
-			if is_instance_valid(f) and not _is_in_safe_zone(f.global_position):
-				return f.global_position
+	var ant_targets: Array[Vector2] = []
+	if not _is_in_safe_zone(leader.global_position):
+		ant_targets.append(leader.global_position)
 
-	var targets: Array = []
+	var squad: Array = leader.get("followers")
+	for f in squad:
+		if is_instance_valid(f) and not _is_in_safe_zone(f.global_position):
+			ant_targets.append(f.global_position)
+
+	var item_targets: Array[Vector2] = []
 	for item in get_tree().get_nodes_in_group("items"):
 		if is_instance_valid(item) and not _is_in_safe_zone(item.global_position):
 			if item.global_position.distance_to(leader.global_position) <= hazard_spawn_range:
-				targets.append(item)
+				item_targets.append(item.global_position)
 
-	var base: Vector2 = leader.global_position
-	if not targets.is_empty():
-		base = targets.pick_random().global_position
+	var target_ants := randf() < target_ants_chance
+	if target_ants and not ant_targets.is_empty():
+		var pos := _pick_offset_position(ant_targets, 85.0)
+		if pos != Vector2.INF:
+			return pos
 
+	if not item_targets.is_empty():
+		var pos := _pick_offset_position(item_targets, 110.0)
+		if pos != Vector2.INF:
+			return pos
+
+	if not ant_targets.is_empty():
+		return _pick_offset_position(ant_targets, 85.0)
+
+	return Vector2.INF
+
+func _pick_offset_position(bases: Array[Vector2], max_offset: float) -> Vector2:
 	for i in range(15):
-		var candidate := base + Vector2(randf_range(-120, 120), randf_range(-120, 120))
+		var base: Vector2 = bases.pick_random()
+		var candidate := base + Vector2(randf_range(-max_offset, max_offset), randf_range(-max_offset, max_offset))
 		if not _is_in_safe_zone(candidate):
 			return candidate
-
 	return Vector2.INF
