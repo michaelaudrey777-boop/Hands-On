@@ -5,7 +5,13 @@
 [ext_resource type="PackedScene" uid="uid://daheniun45xih" path="res://scenes/ant_follower.tscn" id="3_sugp2"]
 [ext_resource type="PackedScene" uid="uid://dne3un4efkfjf" path="res://scenes/scavenge_item.tscn" id="4_jyhfs"]
 [ext_resource type="PackedScene" uid="uid://dx7ha1hcs67fp" path="res://scenes/hazard_foot.tscn" id="4_tefeu"]
+[ext_resource type="Texture2D" uid="uid://iwdbbkys4v4y" path="res://assets/resources/resource_Bread.png" id="4_ya4ey"]
+[ext_resource type="Texture2D" uid="uid://b572ul1fkj2wp" path="res://assets/resources/resource_Water.png" id="5_eb6dy"]
 [ext_resource type="PackedScene" uid="uid://b7ktcttu0c236" path="res://scenes/ant_nest.tscn" id="5_tbgi4"]
+[ext_resource type="Texture2D" uid="uid://bnoogxgdhlvhk" path="res://assets/resources/resource_Fruit.png" id="6_trceg"]
+[ext_resource type="Texture2D" uid="uid://coy7dx8mhwgsd" path="res://assets/resources/resource_Sugar.png" id="7_a8y0u"]
+[ext_resource type="Texture2D" uid="uid://q0cltde4ss7l" path="res://assets/resources/resource_Meat1.png" id="8_jkv2x"]
+[ext_resource type="Texture2D" uid="uid://n7lfykogwfuo" path="res://assets/hazards/foot_green.png" id="10_eb6dy"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_d0nb3"]
 size = Vector2(24, 240)
@@ -14,22 +20,22 @@ size = Vector2(24, 240)
 size = Vector2(240, 24)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_tefeu"]
-size = Vector2(40, 2450)
+size = Vector2(60, 4200)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_o6xl0"]
-size = Vector2(40, 2450)
+size = Vector2(60, 4200)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_84upj"]
-size = Vector2(100, 2650)
+size = Vector2(100, 4400)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_vrco3"]
-size = Vector2(100, 2650)
+size = Vector2(100, 4400)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_jn7yh"]
-size = Vector2(5250, 100)
+size = Vector2(10100, 100)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_5t25c"]
-size = Vector2(5250, 100)
+size = Vector2(10100, 100)
 
 [node name="Main" type="Node2D" unique_id=1787259563 node_paths=PackedStringArray("leader", "ant_dens", "round_start_markers", "forward_borders")]
 script = ExtResource("1_0wfyh")
@@ -37,14 +43,24 @@ follower_scene = ExtResource("3_sugp2")
 leader = NodePath("AntLeader")
 ant_dens = [NodePath("AntDen1"), NodePath("AntDen2"), NodePath("AntDen3")]
 round_start_markers = [null, NodePath("Spawn_Round2"), NodePath("Spawn_Round3")]
-round_spawn_mins = Array[Vector2]([Vector2(303, -1568), Vector2(2300, -1597), Vector2(3366, -1351)])
-round_spawn_maxs = Array[Vector2]([Vector2(2210, 484), Vector2(3655, 405), Vector2(4775, 224)])
+round_spawn_mins = Array[Vector2]([Vector2(200, -300), Vector2(3500, -3000), Vector2(6800, -3000)])
+round_spawn_maxs = Array[Vector2]([Vector2(3100, 800), Vector2(6400, 800), Vector2(9600, 800)])
 forward_borders = [NodePath("RoundBorders/Border_R1_to_R2"), NodePath("RoundBorders/Border_R2_to_R3")]
 item_scene = ExtResource("4_jyhfs")
+item_spawn_interval = 6.0
+min_distance_between_items = 500.0
+tex_bread_crumb = ExtResource("4_ya4ey")
+tex_water_droplet = ExtResource("5_eb6dy")
+tex_fruit_piece = ExtResource("6_trceg")
+tex_sugar_cube = ExtResource("7_a8y0u")
+tex_meat = ExtResource("8_jkv2x")
+grid_columns = 5
+grid_rows = 5
 foot_scene = ExtResource("4_tefeu")
+foot_texture = ExtResource("10_eb6dy")
 
 [node name="AntLeader" parent="." unique_id=1506983490 instance=ExtResource("1_o5qli")]
-position = Vector2(569, 280)
+position = Vector2(450, 650)
 item_scene = ExtResource("4_jyhfs")
 
 [node name="HUD" type="CanvasLayer" parent="." unique_id=1823060854]
@@ -56,15 +72,15 @@ offset_right = 60.0
 offset_bottom = 43.0
 
 [node name="AntDen1" parent="." unique_id=913425769 instance=ExtResource("5_tbgi4")]
-position = Vector2(1951, -1406)
+position = Vector2(2950, -2800)
 
 [node name="AntDen2" parent="." unique_id=964564370 instance=ExtResource("5_tbgi4")]
-position = Vector2(3490, 8)
+position = Vector2(6250, 650)
 required_food = 56
 required_water = 37
 
 [node name="AntDen3" parent="." unique_id=707742666 instance=ExtResource("5_tbgi4")]
-position = Vector2(4774, -1076)
+position = Vector2(9350, -2700)
 required_food = 80
 required_water = 52
 
@@ -88,13 +104,13 @@ shape = SubResource("RectangleShape2D_5wu2r")
 [node name="RoundBorders" type="Node2D" parent="." unique_id=405659590]
 
 [node name="Border_R1_to_R2" type="StaticBody2D" parent="RoundBorders" unique_id=1121053727]
-position = Vector2(2210, -575)
+position = Vector2(3300, -1100)
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="RoundBorders/Border_R1_to_R2" unique_id=461975400]
 shape = SubResource("RectangleShape2D_tefeu")
 
 [node name="Border_R2_to_R3" type="StaticBody2D" parent="RoundBorders" unique_id=441504374]
-position = Vector2(3655, -575)
+position = Vector2(6600, -1100)
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="RoundBorders/Border_R2_to_R3" unique_id=996747778]
 shape = SubResource("RectangleShape2D_o6xl0")
@@ -102,25 +118,25 @@ shape = SubResource("RectangleShape2D_o6xl0")
 [node name="MapBorders" type="StaticBody2D" parent="." unique_id=1773949582]
 
 [node name="WallLeft" type="CollisionShape2D" parent="MapBorders" unique_id=1316470771]
-position = Vector2(50, -575)
+position = Vector2(-50, -1100)
 shape = SubResource("RectangleShape2D_84upj")
 
 [node name="WallRight" type="CollisionShape2D" parent="MapBorders" unique_id=1233678349]
-position = Vector2(5200, -575)
+position = Vector2(9950, -1100)
 shape = SubResource("RectangleShape2D_vrco3")
 
 [node name="WallTop" type="CollisionShape2D" parent="MapBorders" unique_id=332572633]
-position = Vector2(2625, -1850)
+position = Vector2(4950, -3250)
 shape = SubResource("RectangleShape2D_jn7yh")
 
 [node name="WallBottom" type="CollisionShape2D" parent="MapBorders" unique_id=97777806]
-position = Vector2(2625, 700)
+position = Vector2(4950, 1050)
 shape = SubResource("RectangleShape2D_5t25c")
 
 [node name="Spawn_Round2" type="Marker2D" parent="." unique_id=2134173784]
-position = Vector2(2380, -1400)
+position = Vector2(3550, -2800)
 
 [node name="Spawn_Round3" type="Marker2D" parent="." unique_id=2138021059]
-position = Vector2(3820, 0)
+position = Vector2(6850, 650)
 
 [editable path="AntDen3"]

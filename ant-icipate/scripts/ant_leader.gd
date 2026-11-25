@@ -2,11 +2,11 @@ extends CharacterBody2D
 
 signal inventory_updated(current_weight: int, max_capacity: int, food: int, water: int, is_overweight: bool)
 signal squad_updated(current_followers: int, max_followers: int)
+signal leader_died(reason: String)
 
 @export var speed: float = 400.0
 @export var acceleration: float = 2000.0
 @export var friction: float = 2500.0
-@export var turn_speed: float = 12.0
 @export var turn_acceleration: float = 6000.0
 @export var huddle_speed_multiplier: float = 0.5
 @export var shadow_offset: Vector2 = Vector2(5, 8)
@@ -26,6 +26,7 @@ signal squad_updated(current_followers: int, max_followers: int)
 
 var followers: Array[Node2D] = []
 var is_huddling: bool = false
+var is_dead: bool = false
 var carried_items: Array[Dictionary] = []
 var nearby_items: Array[Area2D] = []
 var facing: Vector2 = Vector2.RIGHT
@@ -35,16 +36,20 @@ func _ready() -> void:
 	_emit_status.call_deferred()
 
 func _unhandled_input(event: InputEvent) -> void:
+	if is_dead:
+		return
+
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_E:
 			try_pickup_item()
 		elif event.keycode == KEY_Q:
 			drop_last_item()
-		elif event.keycode == KEY_K and OS.is_debug_build():
-			if not followers.is_empty():
-				remove_follower(followers.back())
 
 func _physics_process(delta: float) -> void:
+	if is_dead:
+		velocity = Vector2.ZERO
+		return
+
 	is_huddling = Input.is_key_pressed(KEY_SPACE)
 
 	var input := Input.get_vector("Left", "Right", "Up", "Down")
@@ -72,6 +77,16 @@ func _physics_process(delta: float) -> void:
 	shadow.frame = sprite.frame
 	shadow.hframes = sprite.hframes
 	shadow.vframes = sprite.vframes
+
+func die(reason: String = "Seluruh semut follower telah gugur!") -> void:
+	if is_dead:
+		return
+	is_dead = true
+	velocity = Vector2.ZERO
+	is_huddling = false
+	sprite.modulate = Color(0.45, 0.45, 0.45, 0.8)
+	_emit_status()
+	leader_died.emit(reason)
 
 func teleport_squad(target_pos: Vector2) -> void:
 	global_position = target_pos
@@ -102,7 +117,7 @@ func spawn_initial_followers() -> void:
 		recruit_follower(follower)
 
 func recruit_follower(follower: Node2D) -> void:
-	if follower in followers or followers.size() >= max_followers:
+	if is_dead or follower in followers or followers.size() >= max_followers:
 		return
 
 	var target_node: Node2D = self if followers.is_empty() else followers.back()
@@ -124,6 +139,9 @@ func remove_follower(follower: Node2D) -> void:
 		follower.queue_free()
 
 	drop_heaviest_items_until_fit()
+
+	if followers.is_empty():
+		die("Seluruh semut follower telah gugur!")
 
 func get_huddle_position(follower: Node2D, radius: float) -> Vector2:
 	var index := followers.find(follower)
@@ -185,12 +203,14 @@ func unregister_nearby_item(item: Area2D) -> void:
 	nearby_items.erase(item)
 
 func try_pickup_item() -> void:
+	if is_dead:
+		return
+
 	nearby_items = nearby_items.filter(func(i): return is_instance_valid(i))
 	if nearby_items.is_empty():
 		return
 
 	if is_overweight():
-		print("Overweight! Tidak bisa mengambil barang lagi.")
 		return
 
 	var closest_item: Area2D = nearby_items[0]
@@ -207,7 +227,9 @@ func try_pickup_item() -> void:
 		"food": closest_item.get("food_value"),
 		"water": closest_item.get("water_value"),
 		"score": closest_item.get("score_value"),
-		"color": closest_item.get("item_color")
+		"color": closest_item.get("item_color"),
+		"texture": closest_item.get("item_texture"),
+		"size_multiplier": closest_item.get("size_multiplier")
 	}
 
 	carried_items.append(item_data)
@@ -217,7 +239,7 @@ func try_pickup_item() -> void:
 	_emit_status()
 
 func drop_last_item() -> void:
-	if carried_items.is_empty():
+	if is_dead or carried_items.is_empty():
 		return
 	if item_scene == null:
 		push_warning("Item Scene di Inspector AntLeader masih kosong!")
