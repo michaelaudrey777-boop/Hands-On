@@ -14,7 +14,6 @@ extends Node2D
 
 @export_group("Round Borders")
 @export var forward_borders: Array[StaticBody2D] = []
-@export var backward_borders: Array[StaticBody2D] = []
 
 @export_group("Item Spawn Settings")
 @export var item_scene: PackedScene
@@ -23,6 +22,13 @@ extends Node2D
 @export var max_items_on_map: int = 10
 @export var min_item_distance_from_leader: float = 600.0
 @export var min_distance_between_items: float = 350.0
+
+@export_group("Item Sprites")
+@export var tex_bread_crumb: Texture2D
+@export var tex_water_droplet: Texture2D
+@export var tex_fruit_piece: Texture2D
+@export var tex_sugar_cube: Texture2D
+@export var tex_meat: Texture2D
 
 @export_group("Default Spawn Area & Distribution")
 @export var spawn_area_min: Vector2 = Vector2(100, 100)
@@ -35,10 +41,12 @@ extends Node2D
 
 @export_group("Hazard Settings")
 @export var foot_scene: PackedScene
+@export var foot_texture: Texture2D
 @export var initial_hazard_delay: float = 20.0
 @export var hazard_interval: float = 20.0
 @export var hazard_spawn_range: float = 1200.0
 @export var target_squad_chance: float = 0.5
+@export var den_safe_radius: float = 420.0
 
 const ITEM_CATALOG: Array[Dictionary] = [
 	{
@@ -48,6 +56,7 @@ const ITEM_CATALOG: Array[Dictionary] = [
 		"water": 0,
 		"score": 3,
 		"color": Color(0.95, 0.75, 0.35),
+		"size_multiplier": 1.0,
 		"spawn_weight": 40
 	},
 	{
@@ -57,6 +66,7 @@ const ITEM_CATALOG: Array[Dictionary] = [
 		"water": 3,
 		"score": 4,
 		"color": Color(0.30, 0.75, 1.00),
+		"size_multiplier": 1.0,
 		"spawn_weight": 35
 	},
 	{
@@ -66,6 +76,7 @@ const ITEM_CATALOG: Array[Dictionary] = [
 		"water": 12,
 		"score": 12,
 		"color": Color(0.90, 0.25, 0.35),
+		"size_multiplier": 1.0,
 		"spawn_weight": 15,
 		"max_on_map": 5
 	},
@@ -76,6 +87,7 @@ const ITEM_CATALOG: Array[Dictionary] = [
 		"water": 0,
 		"score": 25,
 		"color": Color(0.95, 0.95, 1.00),
+		"size_multiplier": 1.0,
 		"spawn_weight": 6,
 		"max_on_map": 1
 	},
@@ -86,6 +98,7 @@ const ITEM_CATALOG: Array[Dictionary] = [
 		"water": 3,
 		"score": 35,
 		"color": Color(0.75, 0.20, 0.20),
+		"size_multiplier": 1.0,
 		"spawn_weight": 4,
 		"max_on_map": 1
 	}
@@ -96,6 +109,7 @@ var total_points: int = 0
 var food_quota: int = 32
 var water_quota: int = 21
 var game_finished: bool = false
+var is_game_over: bool = false
 
 var ui_followers: int = 3
 var ui_max_followers: int = 5
@@ -115,6 +129,8 @@ func _ready() -> void:
 			leader.inventory_updated.connect(_on_inventory_updated)
 		if leader.has_signal("squad_updated"):
 			leader.squad_updated.connect(_on_squad_updated)
+		if leader.has_signal("leader_died"):
+			leader.leader_died.connect(_on_leader_died)
 
 	for den in ant_dens:
 		if den != null and den.has_signal("den_reached"):
@@ -136,6 +152,17 @@ func _ready() -> void:
 	follower_timer.autostart = true
 	follower_timer.timeout.connect(_on_spawn_timer_timeout)
 	add_child(follower_timer)
+
+func _unhandled_input(event: InputEvent) -> void:
+	if (is_game_over or game_finished) and event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_R:
+			get_tree().reload_current_scene()
+
+func _on_leader_died(reason: String) -> void:
+	if is_game_over or game_finished:
+		return
+	is_game_over = true
+	_show_hud_alert("GAME OVER! %s\nTekan [R] untuk mengulang dari awal." % reason, 999.0)
 
 func _setup_round(round_num: int) -> void:
 	current_round = round_num
@@ -161,74 +188,35 @@ func _setup_round(round_num: int) -> void:
 		spawn_area_min = round_spawn_mins[idx]
 		spawn_area_max = round_spawn_maxs[idx]
 
-	# Bersihkan follower liar yang belum direkrut di zona ronde sebelumnya agar kuota spawn tetap jalan
 	if round_num > 1:
 		for f in get_tree().get_nodes_in_group("followers"):
 			if is_instance_valid(f) and f.get("line_target") == null:
 				f.queue_free()
 
-	# Teleport pemain & seluruh barisan ke titik awal ronde baru
 	if leader != null and idx >= 0 and idx < round_start_markers.size():
 		var marker := round_start_markers[idx]
 		if marker != null:
-			if leader.has_method("teleport_squad"):
-				leader.teleport_squad(marker.global_position)
-			else:
-				leader.global_position = marker.global_position
+			leader.teleport_squad(marker.global_position)
 
-	_update_round_borders(round_num)
+	_activate_round_borders()
 
 	_refill_cells(available_follower_cells)
 	_refill_cells(available_item_cells)
 	_refresh_hud()
 
-func _update_round_borders(round_num: int) -> void:
-	var idx := round_num - 1
-
-	# Dinding pembatas antar-zona tetap aktif terus:
-	# - Sebelum teleport: menahan pemain maju ke zona ronde berikutnya
-	# - Sesudah teleport melewati border: menahan pemain kembali ke zona ronde sebelumnya
-	for i in range(forward_borders.size()):
-		var border := forward_borders[i]
-		if border != null:
-			_set_border_active(border, true)
-
-	for i in range(backward_borders.size()):
-		var border := backward_borders[i]
-		if border != null:
-			_set_border_active(border, i < idx)
-
-func _set_border_active(border: StaticBody2D, active: bool) -> void:
-	border.visible = active
-	if border.collision_layer == 0:
-		border.collision_layer = 1
-
-	var found_shape := false
-	for child in border.get_children():
-		if child is CollisionShape2D:
-			found_shape = true
-			if child.shape == null:
-				var rect := RectangleShape2D.new()
-				rect.size = Vector2(40, 2450)
-				child.shape = rect
-			elif child.shape is RectangleShape2D and child.shape.size == Vector2.ZERO:
-				child.shape.size = Vector2(40, 2450)
-			child.set_deferred("disabled", not active)
-		elif child is CollisionPolygon2D:
-			found_shape = true
-			child.set_deferred("disabled", not active)
-
-	if not found_shape:
-		var auto_col := CollisionShape2D.new()
-		auto_col.name = "AutoCollisionShape"
-		var rect := RectangleShape2D.new()
-		rect.size = Vector2(40, 2450)
-		auto_col.shape = rect
-		auto_col.disabled = not active
-		border.add_child(auto_col)
+func _activate_round_borders() -> void:
+	for border in forward_borders:
+		if border == null:
+			continue
+		border.visible = true
+		if border.collision_layer == 0:
+			border.collision_layer = 1
+		for child in border.get_children():
+			if child is CollisionShape2D or child is CollisionPolygon2D:
+				child.set_deferred("disabled", false)
 
 func _on_den_reached(den: Area2D, leader_body: Node2D) -> void:
-	if game_finished:
+	if game_finished or is_game_over:
 		return
 
 	var current_food: int = leader_body.get_total_food()
@@ -253,10 +241,6 @@ func _on_den_reached(den: Area2D, leader_body: Node2D) -> void:
 	)
 	total_points += earned_points
 
-	print("=== %s SELESAI! Poin didapat: +%d (Surplus Food: %d, Surplus Water: %d) | Total Poin: %d ===" % [
-		den.get("den_name"), earned_points, surplus_food, surplus_water, total_points
-	])
-
 	if current_round < ant_dens.size():
 		var upgrade_msg := ""
 		if leader_body.has_method("apply_random_upgrade"):
@@ -267,7 +251,7 @@ func _on_den_reached(den: Area2D, leader_body: Node2D) -> void:
 	else:
 		game_finished = true
 		den.set_den_state(false, true)
-		_show_hud_alert("SEMUA ANT DEN SELESAI! Total Poin Akhir: %d" % total_points, 999.0)
+		_show_hud_alert("SEMUA ANT DEN SELESAI! Total Poin Akhir: %d\nTekan [R] untuk bermain lagi." % total_points, 999.0)
 
 func _show_hud_alert(msg: String, duration: float) -> void:
 	hud_alert_message = msg
@@ -300,7 +284,7 @@ func _refill_cells(cells_pool: Array[Vector2i]) -> void:
 	cells_pool.shuffle()
 
 func _on_spawn_timer_timeout() -> void:
-	if follower_scene == null or game_finished:
+	if follower_scene == null or game_finished or is_game_over:
 		return
 
 	var current_count := get_tree().get_nodes_in_group("followers").size()
@@ -313,7 +297,7 @@ func _on_spawn_timer_timeout() -> void:
 	add_child(wild_follower)
 
 func _on_item_spawn_timer_timeout() -> void:
-	if item_scene == null or game_finished:
+	if item_scene == null or game_finished or is_game_over:
 		return
 
 	var current_items := get_tree().get_nodes_in_group("items").size()
@@ -323,13 +307,29 @@ func _on_item_spawn_timer_timeout() -> void:
 	var spawn_pos := _get_spaced_item_position()
 	if spawn_pos == Vector2.INF:
 		return
-	
-	var item_data := _pick_random_item_data()
+
+	var item_data := _pick_random_item_data().duplicate()
+	item_data["texture"] = _get_item_texture(item_data["name"])
+
 	var new_item := item_scene.instantiate() as Area2D
 	new_item.global_position = spawn_pos
 	if new_item.has_method("apply_data"):
 		new_item.apply_data(item_data)
 	add_child(new_item)
+
+func _get_item_texture(item_name: String) -> Texture2D:
+	match item_name:
+		"Bread Crumb":
+			return tex_bread_crumb
+		"Water Droplet":
+			return tex_water_droplet
+		"Fruit Piece":
+			return tex_fruit_piece
+		"Sugar Cube":
+			return tex_sugar_cube
+		"Meat":
+			return tex_meat
+	return null
 
 func _count_item_in_play(item_name: String) -> int:
 	var count := 0
@@ -464,30 +464,58 @@ func _refresh_hud() -> void:
 
 func _start_hazard_loop() -> void:
 	await get_tree().create_timer(initial_hazard_delay).timeout
-	while is_inside_tree() and not game_finished:
+	while is_inside_tree() and not game_finished and not is_game_over:
 		_spawn_foot()
 		var wait := maxf(5.0, hazard_interval - (current_round - 1) * 5.0)
 		await get_tree().create_timer(wait).timeout
 
 func _spawn_foot() -> void:
-	if foot_scene == null or leader == null:
+	if foot_scene == null or leader == null or leader.get("is_dead") == true:
 		return
+
+	var foot_pos := _get_foot_position()
+	if foot_pos == Vector2.INF:
+		return
+
 	var foot := foot_scene.instantiate() as Node2D
 	foot.leader = leader
-	foot.global_position = _get_foot_position()
+	if foot_texture != null:
+		foot.set("foot_texture", foot_texture)
+	foot.global_position = foot_pos
 	add_child(foot)
 
+func _is_in_safe_zone(pos: Vector2) -> bool:
+	for den in ant_dens:
+		if is_instance_valid(den) and pos.distance_to(den.global_position) < den_safe_radius:
+			return true
+
+	for marker in round_start_markers:
+		if is_instance_valid(marker) and pos.distance_to(marker.global_position) < den_safe_radius:
+			return true
+
+	return false
+
 func _get_foot_position() -> Vector2:
-	var squad: Array = leader.get("followers")
+	var squad: Array = leader.get("followers").duplicate()
 	if not squad.is_empty() and randf() < target_squad_chance:
-		return squad.pick_random().global_position
+		squad.shuffle()
+		for f in squad:
+			if is_instance_valid(f) and not _is_in_safe_zone(f.global_position):
+				return f.global_position
 
 	var targets: Array = []
 	for item in get_tree().get_nodes_in_group("items"):
-		if is_instance_valid(item) and item.global_position.distance_to(leader.global_position) <= hazard_spawn_range:
-			targets.append(item)
+		if is_instance_valid(item) and not _is_in_safe_zone(item.global_position):
+			if item.global_position.distance_to(leader.global_position) <= hazard_spawn_range:
+				targets.append(item)
 
 	var base: Vector2 = leader.global_position
 	if not targets.is_empty():
 		base = targets.pick_random().global_position
-	return base + Vector2(randf_range(-120, 120), randf_range(-120, 120))
+
+	for i in range(15):
+		var candidate := base + Vector2(randf_range(-120, 120), randf_range(-120, 120))
+		if not _is_in_safe_zone(candidate):
+			return candidate
+
+	return Vector2.INF

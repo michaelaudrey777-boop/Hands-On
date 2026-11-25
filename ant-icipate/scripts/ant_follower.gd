@@ -3,7 +3,6 @@ extends Area2D
 @export var delay_seconds: float = 0.25
 @export var follow_distance: float = 128.0
 @export var move_speed: float = 400.0
-@export var turn_speed: float = 12.0
 @export var shadow_offset: Vector2 = Vector2(5, 8)
 @export var recruit_ready_delay: float = 2.0
 
