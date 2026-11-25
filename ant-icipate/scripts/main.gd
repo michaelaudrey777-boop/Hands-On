@@ -394,6 +394,25 @@ func _get_effective_spawn_bounds() -> Rect2:
 		return closing_fog.get_safe_spawn_rect(spawn_area_min, spawn_area_max, 350.0)
 	return Rect2(spawn_area_min, spawn_area_max - spawn_area_min)
 
+func _is_blocked_by_obstacle(pos: Vector2, radius: float = 70.0) -> bool:
+	var space_state := get_world_2d().direct_space_state
+	if space_state == null:
+		return false
+
+	var shape := CircleShape2D.new()
+	shape.radius = radius
+
+	var query := PhysicsShapeQueryParameters2D.new()
+	query.shape = shape
+	query.transform = Transform2D(0.0, pos)
+	query.collision_mask = 1
+	query.collide_with_bodies = true
+	query.collide_with_areas = false
+	if leader is CollisionObject2D:
+		query.exclude = [(leader as CollisionObject2D).get_rid()]
+
+	return not space_state.intersect_shape(query, 1).is_empty()
+
 func _on_spawn_timer_timeout() -> void:
 	if follower_scene == null or game_finished or is_game_over:
 		return
@@ -512,13 +531,18 @@ func _get_follower_spawn_position() -> Vector2:
 			randf_range(cell_min.y, cell_max.y)
 		)
 
-		if leader == null or candidate_pos.distance_to(leader.global_position) >= min_distance_from_leader:
+		if not _is_blocked_by_obstacle(candidate_pos, 65.0) and (leader == null or candidate_pos.distance_to(leader.global_position) >= min_distance_from_leader):
 			return candidate_pos
 
-	return Vector2(
-		randf_range(eff_min.x, eff_max.x),
-		randf_range(eff_min.y, eff_max.y)
-	)
+	for i in range(25):
+		var random_pos := Vector2(
+			randf_range(eff_min.x, eff_max.x),
+			randf_range(eff_min.y, eff_max.y)
+		)
+		if not _is_blocked_by_obstacle(random_pos, 65.0) and (leader == null or random_pos.distance_to(leader.global_position) >= min_distance_from_leader):
+			return random_pos
+
+	return Vector2.INF
 
 func _get_spaced_item_position() -> Vector2:
 	var bounds := _get_effective_spawn_bounds()
@@ -560,6 +584,9 @@ func _get_spaced_item_position() -> Vector2:
 	return Vector2.INF
 
 func _is_valid_item_position(pos: Vector2) -> bool:
+	if _is_blocked_by_obstacle(pos, 75.0):
+		return false
+
 	if closing_fog != null and closing_fog.has_method("is_in_fog") and closing_fog.is_in_fog(pos, 250.0):
 		return false
 

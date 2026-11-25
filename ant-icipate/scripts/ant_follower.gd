@@ -2,14 +2,14 @@ extends Area2D
 
 @export var delay_seconds: float = 0.25
 @export var follow_distance: float = 128.0
-@export var move_speed: float = 400.0
+@export var move_speed: float = 320.0
 @export var shadow_offset: Vector2 = Vector2(4, 33)
 @export var recruit_ready_delay: float = 2.0
 @export var sprite_faces_left: bool = false
 
 @export_group("Huddle Settings")
 @export var huddle_radius: float = 65.0
-@export var huddle_move_speed: float = 900.0
+@export var huddle_move_speed: float = 750.0
 
 @onready var sprite: AnimatedSprite2D = $AnimatedSprite2D
 @onready var shadow: Sprite2D = $Shadow
