@@ -4,10 +4,10 @@ signal inventory_updated(current_weight: int, max_capacity: int, food: int, wate
 signal squad_updated(current_followers: int, max_followers: int)
 signal leader_died(reason: String)
 
-@export var speed: float = 400.0
-@export var acceleration: float = 2000.0
-@export var friction: float = 2500.0
-@export var turn_acceleration: float = 6000.0
+@export var speed: float = 320.0
+@export var acceleration: float = 1800.0
+@export var friction: float = 2300.0
+@export var turn_acceleration: float = 5500.0
 @export var huddle_speed_multiplier: float = 0.5
 @export var shadow_offset: Vector2 = Vector2(4, 33)
 @export var sprite_faces_left: bool = false
@@ -207,7 +207,7 @@ func apply_random_upgrade() -> String:
 			capacity_per_ant += 2
 			result_text = "+2 Carry Capacity/Semut (%d CC/semut)" % capacity_per_ant
 		2:
-			speed += 60.0
+			speed += 45.0
 			result_text = "+Movement Speed (Speed: %.0f)" % speed
 
 	_emit_status()
