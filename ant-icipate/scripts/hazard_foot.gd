@@ -79,10 +79,6 @@ func _kill_ants_underneath() -> void:
 			leader.remove_follower(ant)
 			killed += 1
 
-	# Jika AntLeader berada di dalam area injakan:
-	# - Memicu efek hit flash pada AntLeader
-	# - Bila follower habis (0), AntLeader gugur (Game Over)
-	# - Bila belum ada follower yang terinjak, korbankan follower paling belakang
 	if _is_under_foot(leader.global_position):
 		if leader.has_method("play_hit_flash"):
 			leader.play_hit_flash()

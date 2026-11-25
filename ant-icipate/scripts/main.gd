@@ -231,13 +231,16 @@ func _start_round_fog(round_num: int) -> void:
 	var idx := round_num - 1
 	var zone_min_x := float(idx) * 8000.0
 	var zone_max_x := float(round_num) * 8000.0
+	var zone_min_y := -8000.0
+	var zone_max_y := 1000.0
 
 	if idx > 0 and (idx - 1) < forward_borders.size() and forward_borders[idx - 1] != null:
 		zone_min_x = forward_borders[idx - 1].global_position.x
 	if idx < forward_borders.size() and forward_borders[idx] != null:
 		zone_max_x = forward_borders[idx].global_position.x
 
-	closing_fog.start_round(zone_min_x, zone_max_x, round_num)
+	var fog_dir := "bottom" if round_num == 1 else "left"
+	closing_fog.start_round(zone_min_x, zone_max_x, zone_min_y, zone_max_y, round_num, fog_dir)
 
 func _populate_initial_round_items() -> void:
 	var target_count := mini(initial_round_items, max_items_on_map)
@@ -325,11 +328,10 @@ func _refill_cells(cells_pool: Array[Vector2i]) -> void:
 			cells_pool.append(Vector2i(x, y))
 	cells_pool.shuffle()
 
-func _get_effective_spawn_min() -> Vector2:
-	var eff_min := spawn_area_min
-	if closing_fog != null and closing_fog.has_method("get_safe_min_x"):
-		eff_min.x = maxf(eff_min.x, closing_fog.get_safe_min_x(300.0))
-	return eff_min
+func _get_effective_spawn_bounds() -> Rect2:
+	if closing_fog != null and closing_fog.has_method("get_safe_spawn_rect"):
+		return closing_fog.get_safe_spawn_rect(spawn_area_min, spawn_area_max, 350.0)
+	return Rect2(spawn_area_min, spawn_area_max - spawn_area_min)
 
 func _on_spawn_timer_timeout() -> void:
 	if follower_scene == null or game_finished or is_game_over:
@@ -424,13 +426,15 @@ func _pick_random_item_data() -> Dictionary:
 	return pool[0]
 
 func _get_follower_spawn_position() -> Vector2:
-	var eff_min := _get_effective_spawn_min()
-	if eff_min.x >= spawn_area_max.x - 300.0:
+	var bounds := _get_effective_spawn_bounds()
+	if bounds.size.x < 350.0 or bounds.size.y < 350.0:
 		return Vector2.INF
 
+	var eff_min := bounds.position
+	var eff_max := bounds.end
 	var cell_size := Vector2(
-		(spawn_area_max.x - eff_min.x) / float(grid_columns),
-		(spawn_area_max.y - eff_min.y) / float(grid_rows)
+		bounds.size.x / float(grid_columns),
+		bounds.size.y / float(grid_rows)
 	)
 	var padding := cell_size * 0.15
 
@@ -451,18 +455,20 @@ func _get_follower_spawn_position() -> Vector2:
 			return candidate_pos
 
 	return Vector2(
-		randf_range(eff_min.x, spawn_area_max.x),
-		randf_range(eff_min.y, spawn_area_max.y)
+		randf_range(eff_min.x, eff_max.x),
+		randf_range(eff_min.y, eff_max.y)
 	)
 
 func _get_spaced_item_position() -> Vector2:
-	var eff_min := _get_effective_spawn_min()
-	if eff_min.x >= spawn_area_max.x - 400.0:
+	var bounds := _get_effective_spawn_bounds()
+	if bounds.size.x < 450.0 or bounds.size.y < 450.0:
 		return Vector2.INF
 
+	var eff_min := bounds.position
+	var eff_max := bounds.end
 	var cell_size := Vector2(
-		(spawn_area_max.x - eff_min.x) / float(grid_columns),
-		(spawn_area_max.y - eff_min.y) / float(grid_rows)
+		bounds.size.x / float(grid_columns),
+		bounds.size.y / float(grid_rows)
 	)
 	var padding := cell_size * 0.2
 
@@ -484,8 +490,8 @@ func _get_spaced_item_position() -> Vector2:
 
 	for i in range(30):
 		var random_pos := Vector2(
-			randf_range(eff_min.x, spawn_area_max.x),
-			randf_range(eff_min.y, spawn_area_max.y)
+			randf_range(eff_min.x, eff_max.x),
+			randf_range(eff_min.y, eff_max.y)
 		)
 		if _is_valid_item_position(random_pos):
 			return random_pos
