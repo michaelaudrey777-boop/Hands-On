@@ -39,6 +39,7 @@ extends Node2D
 @export var min_distance_from_leader: float = 450.0
 
 @onready var status_label: Label = get_node_or_null("HUD/StatusLabel")
+@onready var closing_fog: Node2D = get_node_or_null("ClosingFog")
 
 @export_group("Hazard Settings")
 @export var foot_scene: PackedScene
@@ -135,6 +136,11 @@ func _ready() -> void:
 		if leader.has_signal("leader_died"):
 			leader.leader_died.connect(_on_leader_died)
 
+	if closing_fog != null:
+		closing_fog.leader = leader
+		if closing_fog.has_signal("fog_started_closing"):
+			closing_fog.fog_started_closing.connect(_on_fog_started_closing)
+
 	for den in ant_dens:
 		if den != null and den.has_signal("den_reached"):
 			den.den_reached.connect(_on_den_reached)
@@ -161,10 +167,16 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.keycode == KEY_R:
 			get_tree().reload_current_scene()
 
+func _on_fog_started_closing() -> void:
+	if not is_game_over and not game_finished:
+		_show_hud_alert("THE FOG IS CLOSING IN! Segera kumpulkan kuota & maju ke Ant Den!", 4.5)
+
 func _on_leader_died(reason: String) -> void:
 	if is_game_over or game_finished:
 		return
 	is_game_over = true
+	if closing_fog != null and closing_fog.has_method("stop"):
+		closing_fog.stop()
 	_show_hud_alert("GAME OVER! %s\nTekan [R] untuk mengulang dari awal." % reason, 999.0)
 
 func _setup_round(round_num: int) -> void:
@@ -205,11 +217,27 @@ func _setup_round(round_num: int) -> void:
 			leader.teleport_squad(marker.global_position)
 
 	_activate_round_borders()
+	_start_round_fog(round_num)
 
 	_refill_cells(available_follower_cells)
 	_refill_cells(available_item_cells)
 	_populate_initial_round_items.call_deferred()
 	_refresh_hud()
+
+func _start_round_fog(round_num: int) -> void:
+	if closing_fog == null or not closing_fog.has_method("start_round"):
+		return
+
+	var idx := round_num - 1
+	var zone_min_x := float(idx) * 8000.0
+	var zone_max_x := float(round_num) * 8000.0
+
+	if idx > 0 and (idx - 1) < forward_borders.size() and forward_borders[idx - 1] != null:
+		zone_min_x = forward_borders[idx - 1].global_position.x
+	if idx < forward_borders.size() and forward_borders[idx] != null:
+		zone_max_x = forward_borders[idx].global_position.x
+
+	closing_fog.start_round(zone_min_x, zone_max_x, round_num)
 
 func _populate_initial_round_items() -> void:
 	var target_count := mini(initial_round_items, max_items_on_map)
@@ -262,6 +290,8 @@ func _on_den_reached(den: Area2D, leader_body: Node2D) -> void:
 		_show_hud_alert("ROUND %d SELESAI! (+%d Poin)\nUpgrade Acak: %s" % [current_round - 1, earned_points, upgrade_msg], 5.0)
 	else:
 		game_finished = true
+		if closing_fog != null and closing_fog.has_method("stop"):
+			closing_fog.stop()
 		den.set_den_state(false, true)
 		_show_hud_alert("SEMUA ANT DEN SELESAI! Total Poin Akhir: %d\nTekan [R] untuk bermain lagi." % total_points, 999.0)
 
@@ -295,6 +325,12 @@ func _refill_cells(cells_pool: Array[Vector2i]) -> void:
 			cells_pool.append(Vector2i(x, y))
 	cells_pool.shuffle()
 
+func _get_effective_spawn_min() -> Vector2:
+	var eff_min := spawn_area_min
+	if closing_fog != null and closing_fog.has_method("get_safe_min_x"):
+		eff_min.x = maxf(eff_min.x, closing_fog.get_safe_min_x(300.0))
+	return eff_min
+
 func _on_spawn_timer_timeout() -> void:
 	if follower_scene == null or game_finished or is_game_over:
 		return
@@ -304,8 +340,12 @@ func _on_spawn_timer_timeout() -> void:
 	if current_count >= max_limit:
 		return
 
+	var spawn_pos := _get_follower_spawn_position()
+	if spawn_pos == Vector2.INF:
+		return
+
 	var wild_follower := follower_scene.instantiate() as Node2D
-	wild_follower.global_position = _get_follower_spawn_position()
+	wild_follower.global_position = spawn_pos
 	add_child(wild_follower)
 
 func _on_item_spawn_timer_timeout() -> void:
@@ -340,7 +380,10 @@ func _get_item_texture(item_name: String) -> Texture2D:
 		"Sugar Cube":
 			return tex_sugar_cube
 		"Meat":
-			var valid_meats := tex_meat_variants.filter(func(t): return t != null)
+			var valid_meats: Array[Texture2D] = []
+			for t in tex_meat_variants:
+				if t != null:
+					valid_meats.append(t)
 			if not valid_meats.is_empty():
 				return valid_meats.pick_random()
 	return null
@@ -381,9 +424,13 @@ func _pick_random_item_data() -> Dictionary:
 	return pool[0]
 
 func _get_follower_spawn_position() -> Vector2:
+	var eff_min := _get_effective_spawn_min()
+	if eff_min.x >= spawn_area_max.x - 300.0:
+		return Vector2.INF
+
 	var cell_size := Vector2(
-		(spawn_area_max.x - spawn_area_min.x) / float(grid_columns),
-		(spawn_area_max.y - spawn_area_min.y) / float(grid_rows)
+		(spawn_area_max.x - eff_min.x) / float(grid_columns),
+		(spawn_area_max.y - eff_min.y) / float(grid_rows)
 	)
 	var padding := cell_size * 0.15
 
@@ -392,7 +439,7 @@ func _get_follower_spawn_position() -> Vector2:
 			_refill_cells(available_follower_cells)
 
 		var cell: Vector2i = available_follower_cells.pop_front()
-		var cell_min := spawn_area_min + Vector2(cell.x * cell_size.x, cell.y * cell_size.y) + padding
+		var cell_min := eff_min + Vector2(cell.x * cell_size.x, cell.y * cell_size.y) + padding
 		var cell_max := cell_min + cell_size - (padding * 2.0)
 
 		var candidate_pos := Vector2(
@@ -404,14 +451,18 @@ func _get_follower_spawn_position() -> Vector2:
 			return candidate_pos
 
 	return Vector2(
-		randf_range(spawn_area_min.x, spawn_area_max.x),
-		randf_range(spawn_area_min.y, spawn_area_max.y)
+		randf_range(eff_min.x, spawn_area_max.x),
+		randf_range(eff_min.y, spawn_area_max.y)
 	)
 
 func _get_spaced_item_position() -> Vector2:
+	var eff_min := _get_effective_spawn_min()
+	if eff_min.x >= spawn_area_max.x - 400.0:
+		return Vector2.INF
+
 	var cell_size := Vector2(
-		(spawn_area_max.x - spawn_area_min.x) / float(grid_columns),
-		(spawn_area_max.y - spawn_area_min.y) / float(grid_rows)
+		(spawn_area_max.x - eff_min.x) / float(grid_columns),
+		(spawn_area_max.y - eff_min.y) / float(grid_rows)
 	)
 	var padding := cell_size * 0.2
 
@@ -420,7 +471,7 @@ func _get_spaced_item_position() -> Vector2:
 			_refill_cells(available_item_cells)
 
 		var cell: Vector2i = available_item_cells.pop_front()
-		var cell_min := spawn_area_min + Vector2(cell.x * cell_size.x, cell.y * cell_size.y) + padding
+		var cell_min := eff_min + Vector2(cell.x * cell_size.x, cell.y * cell_size.y) + padding
 		var cell_max := cell_min + cell_size - (padding * 2.0)
 
 		var candidate_pos := Vector2(
@@ -433,8 +484,8 @@ func _get_spaced_item_position() -> Vector2:
 
 	for i in range(30):
 		var random_pos := Vector2(
-			randf_range(spawn_area_min.x, spawn_area_max.x),
-			randf_range(spawn_area_min.y, spawn_area_max.y)
+			randf_range(eff_min.x, spawn_area_max.x),
+			randf_range(eff_min.y, spawn_area_max.y)
 		)
 		if _is_valid_item_position(random_pos):
 			return random_pos
@@ -442,6 +493,9 @@ func _get_spaced_item_position() -> Vector2:
 	return Vector2.INF
 
 func _is_valid_item_position(pos: Vector2) -> bool:
+	if closing_fog != null and closing_fog.has_method("is_in_fog") and closing_fog.is_in_fog(pos, 250.0):
+		return false
+
 	if leader != null and pos.distance_to(leader.global_position) < min_item_distance_from_leader:
 		return false
 
@@ -499,13 +553,22 @@ func _spawn_foot() -> void:
 	var foot := foot_scene.instantiate() as Node2D
 	foot.add_to_group("hazards")
 	foot.leader = leader
-	var valid_feet := foot_textures.filter(func(t): return t != null)
+
+	var valid_feet: Array[Texture2D] = []
+	for t in foot_textures:
+		if t != null:
+			valid_feet.append(t)
 	if not valid_feet.is_empty():
-		foot.set("foot_texture", valid_feet.pick_random())
+		foot.set("foot_textures", valid_feet)
+		foot.set("foot_texture", valid_feet[0])
+
 	foot.global_position = foot_pos
 	add_child(foot)
 
 func _is_in_safe_zone(pos: Vector2) -> bool:
+	if closing_fog != null and closing_fog.has_method("is_in_fog") and closing_fog.is_in_fog(pos, 100.0):
+		return true
+
 	for den in ant_dens:
 		if is_instance_valid(den) and pos.distance_to(den.global_position) < den_safe_radius:
 			return true

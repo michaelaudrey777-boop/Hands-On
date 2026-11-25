@@ -9,3 +9,5 @@ radius = 250.0
 shadow_texture = ExtResource("2_0hrdb")
 shadow_offset = Vector2(0, 33)
 shadow_visual_scale_multiplier = 1.15
+stomp_swap_delay = 0.2
+stomp_swap_interval = 0.1

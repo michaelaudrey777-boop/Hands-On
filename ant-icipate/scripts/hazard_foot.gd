@@ -12,13 +12,19 @@ extends Node2D
 @export var shadow_offset: Vector2 = Vector2(0, 18)
 @export var shadow_visual_scale_multiplier: float = 1.0
 @export var foot_texture: Texture2D = null
+@export var foot_textures: Array[Texture2D] = []
 @export var foot_visual_scale_multiplier: float = 1.1
+@export var stomp_swap_delay: float = 0.25
+@export var stomp_swap_interval: float = 0.08
 
 var leader: Node2D = null
 
 enum State { TELEGRAPH, STOMPED }
 var state: State = State.TELEGRAPH
 var timer: float = 0.0
+var swap_timer: float = 0.0
+var active_foot_textures: Array[Texture2D] = []
+var current_foot_index: int = 0
 
 func _ready() -> void:
 	z_index = -1  # shadow under the ants
@@ -30,6 +36,11 @@ func _process(delta: float) -> void:
 			if timer >= telegraph_time:
 				_stomp()
 		State.STOMPED:
+			if active_foot_textures.size() > 1 and timer >= stomp_swap_delay:
+				swap_timer += delta
+				if swap_timer >= stomp_swap_interval:
+					swap_timer -= stomp_swap_interval
+					current_foot_index = (current_foot_index + 1) % active_foot_textures.size()
 			if timer >= linger_time:
 				queue_free()
 	queue_redraw()
@@ -37,7 +48,19 @@ func _process(delta: float) -> void:
 func _stomp() -> void:
 	state = State.STOMPED
 	timer = 0.0
+	swap_timer = 0.0
 	z_index = 10  # foot over the ants
+
+	active_foot_textures.clear()
+	for tex in foot_textures:
+		if tex != null:
+			active_foot_textures.append(tex)
+	if active_foot_textures.is_empty() and foot_texture != null:
+		active_foot_textures.append(foot_texture)
+
+	if not active_foot_textures.is_empty():
+		current_foot_index = randi() % active_foot_textures.size()
+
 	_kill_ants_underneath()
 
 func _is_under_foot(pos: Vector2) -> bool:
@@ -56,7 +79,14 @@ func _kill_ants_underneath() -> void:
 			leader.remove_follower(ant)
 			killed += 1
 
+	# Jika AntLeader berada di dalam area injakan:
+	# - Memicu efek hit flash pada AntLeader
+	# - Bila follower habis (0), AntLeader gugur (Game Over)
+	# - Bila belum ada follower yang terinjak, korbankan follower paling belakang
 	if _is_under_foot(leader.global_position):
+		if leader.has_method("play_hit_flash"):
+			leader.play_hit_flash()
+
 		if leader.followers.is_empty():
 			if leader.has_method("die"):
 				leader.die("Ant Leader terinjak saat tidak ada follower tersisa!")
@@ -87,8 +117,9 @@ func _draw() -> void:
 			if shadow_texture != null:
 				_draw_centered_texture(shadow_texture, radius * 2.0 * shadow_visual_scale_multiplier, Color(1, 1, 1, 0.85), shadow_offset)
 
-			if foot_texture != null:
-				_draw_centered_texture(foot_texture, radius * 2.0 * foot_visual_scale_multiplier, Color.WHITE)
+			if not active_foot_textures.is_empty():
+				var current_tex := active_foot_textures[current_foot_index]
+				_draw_centered_texture(current_tex, radius * 2.0 * foot_visual_scale_multiplier, Color.WHITE)
 			else:
 				draw_circle(Vector2.ZERO, radius, Color(0.35, 0.20, 0.14))
 				draw_arc(Vector2.ZERO, radius, 0.0, TAU, 64, Color(0.15, 0.08, 0.05), 6.0)

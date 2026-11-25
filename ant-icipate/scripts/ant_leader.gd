@@ -9,7 +9,8 @@ signal leader_died(reason: String)
 @export var friction: float = 2500.0
 @export var turn_acceleration: float = 6000.0
 @export var huddle_speed_multiplier: float = 0.5
-@export var shadow_offset: Vector2 = Vector2(5, 8)
+@export var shadow_offset: Vector2 = Vector2(4, 33)
+@export var sprite_faces_left: bool = false
 
 @export_group("Follower Settings")
 @export var follower_scene: PackedScene
@@ -21,7 +22,7 @@ signal leader_died(reason: String)
 @export var capacity_per_ant: int = 8
 @export var include_leader_in_capacity: bool = true
 
-@onready var sprite: Sprite2D = $Sprite2D
+@onready var sprite: AnimatedSprite2D = $AnimatedSprite2D
 @onready var shadow: Sprite2D = $Shadow
 
 var followers: Array[Node2D] = []
@@ -30,8 +31,10 @@ var is_dead: bool = false
 var carried_items: Array[Dictionary] = []
 var nearby_items: Array[Area2D] = []
 var facing: Vector2 = Vector2.RIGHT
+var flash_tween: Tween = null
 
 func _ready() -> void:
+	_update_animation(false)
 	spawn_initial_followers()
 	_emit_status.call_deferred()
 
@@ -48,6 +51,8 @@ func _unhandled_input(event: InputEvent) -> void:
 func _physics_process(delta: float) -> void:
 	if is_dead:
 		velocity = Vector2.ZERO
+		_update_animation(false)
+		_sync_shadow()
 		return
 
 	is_huddling = Input.is_key_pressed(KEY_SPACE)
@@ -68,15 +73,46 @@ func _physics_process(delta: float) -> void:
 	if input:
 		facing = input.normalized()
 		if absf(input.x) > 0.1:
-			sprite.flip_h = input.x < 0.0
-			shadow.flip_h = sprite.flip_h
+			var moving_left := input.x < 0.0
+			sprite.flip_h = not moving_left if sprite_faces_left else moving_left
 
 	move_and_slide()
+
+	var is_moving := input.length() > 0.1 or velocity.length() > 15.0
+	_update_animation(is_moving)
+	_sync_shadow()
+
+func _update_animation(is_moving: bool) -> void:
+	if sprite == null or sprite.sprite_frames == null:
+		return
+	var anim_name := &"walking" if is_moving else &"idle"
+	if sprite.sprite_frames.has_animation(anim_name) and sprite.animation != anim_name:
+		sprite.play(anim_name)
+
+func _sync_shadow() -> void:
+	if shadow == null or sprite == null:
+		return
 	shadow.global_position = sprite.global_position + shadow_offset
-	shadow.texture = sprite.texture
-	shadow.frame = sprite.frame
-	shadow.hframes = sprite.hframes
-	shadow.vframes = sprite.vframes
+	shadow.flip_h = sprite.flip_h
+	shadow.scale = sprite.scale
+	if sprite.sprite_frames != null and sprite.sprite_frames.has_animation(sprite.animation):
+		var frame_count := sprite.sprite_frames.get_frame_count(sprite.animation)
+		if frame_count > 0:
+			var safe_frame := clampi(sprite.frame, 0, frame_count - 1)
+			shadow.texture = sprite.sprite_frames.get_frame_texture(sprite.animation, safe_frame)
+
+func play_hit_flash() -> void:
+	if sprite == null:
+		return
+	if flash_tween != null and flash_tween.is_valid():
+		flash_tween.kill()
+
+	var base_color := Color(0.45, 0.45, 0.45, 0.8) if is_dead else Color.WHITE
+	sprite.modulate = Color(4.5, 4.5, 4.5, 1.0)
+	flash_tween = create_tween()
+	flash_tween.tween_property(sprite, "modulate", Color(2.5, 0.35, 0.35, 1.0), 0.08)
+	flash_tween.tween_property(sprite, "modulate", Color(4.0, 4.0, 4.0, 1.0), 0.06)
+	flash_tween.tween_property(sprite, "modulate", base_color, 0.12)
 
 func die(reason: String = "Seluruh semut follower telah gugur!") -> void:
 	if is_dead:
@@ -84,14 +120,16 @@ func die(reason: String = "Seluruh semut follower telah gugur!") -> void:
 	is_dead = true
 	velocity = Vector2.ZERO
 	is_huddling = false
-	sprite.modulate = Color(0.45, 0.45, 0.45, 0.8)
+	play_hit_flash()
+	_update_animation(false)
+	_sync_shadow()
 	_emit_status()
 	leader_died.emit(reason)
 
 func teleport_squad(target_pos: Vector2) -> void:
 	global_position = target_pos
 	velocity = Vector2.ZERO
-	shadow.global_position = sprite.global_position + shadow_offset
+	_sync_shadow()
 
 	for i in range(followers.size()):
 		var f := followers[i]
@@ -136,12 +174,17 @@ func remove_follower(follower: Node2D) -> void:
 		followers[idx].set_target(new_target, self)
 
 	if is_instance_valid(follower):
-		follower.queue_free()
+		if follower.has_method("die_with_flash"):
+			follower.die_with_flash()
+		else:
+			follower.queue_free()
 
 	drop_heaviest_items_until_fit()
 
 	if followers.is_empty():
 		die("Seluruh semut follower telah gugur!")
+	else:
+		play_hit_flash()
 
 func get_huddle_position(follower: Node2D, radius: float) -> Vector2:
 	var index := followers.find(follower)
