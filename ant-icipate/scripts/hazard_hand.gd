@@ -1,4 +1,5 @@
 extends Node2D
+## Fast horizontal sweeping human hand hazard with wind-up charge and auto-shadow.
 
 @export var hand_radius: float = 110.0
 @export var sweep_distance: float = 1900.0
@@ -9,7 +10,7 @@ extends Node2D
 @export_group("Visual Sprites")
 @export var charge_hand_texture: Texture2D = null
 @export var sweep_hand_texture: Texture2D = null
-@export var hand_texture: Texture2D = null 
+@export var hand_texture: Texture2D = null
 @export var hand_visual_scale_multiplier: float = 1.25
 @export var sprite_faces_left: bool = false
 
@@ -22,7 +23,7 @@ extends Node2D
 @export var shadow_color: Color = Color(0.0, 0.0, 0.0, 0.38)
 
 var leader: Node2D = null
-var sweep_direction: int = 1 
+var sweep_direction: int = 1
 
 enum State { TELEGRAPH, SWEEPING }
 var state: State = State.TELEGRAPH
@@ -68,6 +69,8 @@ func _start_sweep() -> void:
 	timer = 0.0
 	sweep_progress = 0.0
 	z_index = 12
+	if leader != null and is_instance_valid(leader) and leader.has_method("trigger_swipe_effect"):
+		leader.trigger_swipe_effect(float(sweep_direction), global_position)
 
 func _get_active_hand_texture() -> Texture2D:
 	if state == State.TELEGRAPH:
@@ -112,7 +115,7 @@ func _check_sweep_hits() -> void:
 
 		if leader.followers.is_empty():
 			if leader.has_method("die"):
-				leader.die("Ant Leader tersapu tangan manusia!")
+				leader.die("Ant Leader was swept away by a human hand!")
 		elif killed_this_step == 0:
 			leader.remove_follower(leader.followers.back())
 

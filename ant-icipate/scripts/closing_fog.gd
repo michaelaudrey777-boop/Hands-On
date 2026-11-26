@@ -141,7 +141,7 @@ func _apply_fog_damage(delta: float) -> void:
 	elif leader_in_fog:
 		if squad.is_empty():
 			if leader.has_method("die"):
-				leader.die("Pasukan semut tertelan kabut beracun!")
+				leader.die("The ant squad was swallowed by toxic fog!")
 		else:
 			leader.remove_follower(squad.back())
 

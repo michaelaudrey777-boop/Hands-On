@@ -22,8 +22,23 @@ signal leader_died(reason: String)
 @export var capacity_per_ant: int = 8
 @export var include_leader_in_capacity: bool = true
 
+@export_group("Hit Screen Feedback")
+@export var screen_twitch_strength: float = 18.0
+@export var screen_twitch_decay: float = 14.0
+@export var screen_red_intensity: float = 0.34
+@export var screen_red_color: Color = Color(0.88, 0.08, 0.06, 1.0)
+
+@export_group("Hazard Camera Feedback")
+@export var stomp_shake_strength: float = 13.0
+@export var stomp_shake_decay: float = 11.0
+@export var stomp_max_range: float = 2200.0
+@export var swipe_kick_distance: float = 42.0
+@export var swipe_tilt_degrees: float = 0.9
+@export var swipe_recover_speed: float = 9.0
+
 @onready var sprite: AnimatedSprite2D = $AnimatedSprite2D
 @onready var shadow: Sprite2D = $Shadow
+@onready var cam: Camera2D = get_node_or_null("Camera2D")
 
 var followers: Array[Node2D] = []
 var is_huddling: bool = false
@@ -33,10 +48,56 @@ var nearby_items: Array[Area2D] = []
 var facing: Vector2 = Vector2.RIGHT
 var flash_tween: Tween = null
 
+var shake_strength: float = 0.0
+var shake_angle: float = 0.0
+var stomp_strength: float = 0.0
+var stomp_phase: float = 0.0
+var swipe_offset_x: float = 0.0
+var swipe_tilt_rad: float = 0.0
+var damage_overlay_mat: ShaderMaterial = null
+var damage_overlay_tween: Tween = null
+
 func _ready() -> void:
+	if cam != null:
+		cam.ignore_rotation = false
+	_setup_damage_overlay()
 	_update_animation(false)
 	spawn_initial_followers()
 	_emit_status.call_deferred()
+
+func _setup_damage_overlay() -> void:
+	var overlay_layer := CanvasLayer.new()
+	overlay_layer.name = "DamageFlashLayer"
+	overlay_layer.layer = 10
+	add_child(overlay_layer)
+
+	var rect := ColorRect.new()
+	rect.name = "RedFlashRect"
+	rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	rect.color = Color.WHITE
+
+	var shader := Shader.new()
+	shader.code = """
+shader_type canvas_item;
+
+uniform float intensity : hint_range(0.0, 1.0) = 0.0;
+uniform vec4 flash_color : source_color = vec4(0.88, 0.08, 0.06, 1.0);
+
+void fragment() {
+	vec2 centered_uv = UV - vec2(0.5);
+	float dist = length(centered_uv) * 1.4142;
+	float vignette = mix(0.35, 1.0, smoothstep(0.2, 1.0, dist));
+	COLOR = vec4(flash_color.rgb, flash_color.a * intensity * vignette);
+}
+"""
+	damage_overlay_mat = ShaderMaterial.new()
+	damage_overlay_mat.shader = shader
+	damage_overlay_mat.set_shader_parameter("intensity", 0.0)
+	damage_overlay_mat.set_shader_parameter("flash_color", screen_red_color)
+	rect.material = damage_overlay_mat
+
+	overlay_layer.add_child(rect)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if is_dead:
@@ -47,6 +108,37 @@ func _unhandled_input(event: InputEvent) -> void:
 			try_pickup_item()
 		elif event.keycode == KEY_Q:
 			drop_last_item()
+
+func _process(delta: float) -> void:
+	if cam == null:
+		return
+
+	var total_offset := Vector2.ZERO
+
+	if shake_strength > 0.05:
+		shake_angle += randf_range(2.1, 4.2)
+		total_offset += Vector2.from_angle(shake_angle) * shake_strength
+		shake_strength = lerpf(shake_strength, 0.0, clampf(screen_twitch_decay * delta, 0.0, 1.0))
+	else:
+		shake_strength = 0.0
+
+	if stomp_strength > 0.05:
+		stomp_phase += delta * 58.0
+		total_offset += Vector2(cos(stomp_phase * 0.65) * 0.35, sin(stomp_phase)) * stomp_strength
+		stomp_strength = lerpf(stomp_strength, 0.0, clampf(stomp_shake_decay * delta, 0.0, 1.0))
+	else:
+		stomp_strength = 0.0
+
+	if absf(swipe_offset_x) > 0.05 or absf(swipe_tilt_rad) > 0.0005:
+		total_offset.x += swipe_offset_x
+		swipe_offset_x = lerpf(swipe_offset_x, 0.0, clampf(swipe_recover_speed * delta, 0.0, 1.0))
+		swipe_tilt_rad = lerpf(swipe_tilt_rad, 0.0, clampf(swipe_recover_speed * delta, 0.0, 1.0))
+	else:
+		swipe_offset_x = 0.0
+		swipe_tilt_rad = 0.0
+
+	cam.offset = total_offset
+	cam.rotation = swipe_tilt_rad
 
 func _physics_process(delta: float) -> void:
 	if is_dead:
@@ -101,7 +193,48 @@ func _sync_shadow() -> void:
 			var safe_frame := clampi(sprite.frame, 0, frame_count - 1)
 			shadow.texture = sprite.sprite_frames.get_frame_texture(sprite.animation, safe_frame)
 
+func _get_distance_falloff(world_pos: Vector2, min_factor: float = 0.35) -> float:
+	if world_pos == Vector2.INF:
+		return 1.0
+	var dist := global_position.distance_to(world_pos)
+	var ratio := 1.0 - clampf(dist / maxf(1.0, stomp_max_range), 0.0, 1.0)
+	return lerpf(min_factor, 1.0, ratio)
+
+func trigger_stomp_effect(impact_world_pos: Vector2 = Vector2.INF, multiplier: float = 1.0) -> void:
+	var falloff := _get_distance_falloff(impact_world_pos, 0.35)
+	stomp_strength = maxf(stomp_strength, stomp_shake_strength * falloff * multiplier)
+
+func trigger_swipe_effect(dir_x: float, hazard_world_pos: Vector2 = Vector2.INF, multiplier: float = 1.0) -> void:
+	var sign_x := 1.0 if dir_x >= 0.0 else -1.0
+	var falloff := _get_distance_falloff(hazard_world_pos, 0.45)
+	swipe_offset_x = clampf(swipe_offset_x + sign_x * swipe_kick_distance * falloff * multiplier, -75.0, 75.0)
+	swipe_tilt_rad = clampf(swipe_tilt_rad + deg_to_rad(swipe_tilt_degrees) * sign_x * falloff * multiplier, -0.04, 0.04)
+
+func trigger_screen_hit_effect(multiplier: float = 1.0) -> void:
+	shake_strength = maxf(shake_strength, screen_twitch_strength * multiplier)
+	shake_angle = randf() * TAU
+
+	if damage_overlay_mat != null:
+		if damage_overlay_tween != null and damage_overlay_tween.is_valid():
+			damage_overlay_tween.kill()
+
+		var peak := clampf(screen_red_intensity * multiplier, 0.0, 0.75)
+		damage_overlay_mat.set_shader_parameter("flash_color", screen_red_color)
+		damage_overlay_mat.set_shader_parameter("intensity", peak)
+
+		damage_overlay_tween = create_tween()
+		damage_overlay_tween.tween_method(
+			func(val: float) -> void:
+				if damage_overlay_mat != null:
+					damage_overlay_mat.set_shader_parameter("intensity", val),
+			peak,
+			0.0,
+			0.35
+		).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
 func play_hit_flash() -> void:
+	trigger_screen_hit_effect(1.35 if is_dead else 1.0)
+
 	if sprite == null:
 		return
 	if flash_tween != null and flash_tween.is_valid():
@@ -114,12 +247,43 @@ func play_hit_flash() -> void:
 	flash_tween.tween_property(sprite, "modulate", Color(4.0, 4.0, 4.0, 1.0), 0.06)
 	flash_tween.tween_property(sprite, "modulate", base_color, 0.12)
 
-func die(reason: String = "Seluruh semut follower telah gugur!") -> void:
+func scatter_all_items_on_death() -> void:
+	if carried_items.is_empty():
+		return
+
+	var total := carried_items.size()
+	var base_angle := randf() * TAU
+
+	if item_scene != null and get_parent() != null:
+		for i in range(total):
+			var item_data: Dictionary = carried_items[i]
+			var scattered := item_scene.instantiate() as Area2D
+			scattered.global_position = global_position
+
+			if scattered.has_method("apply_data"):
+				scattered.apply_data(item_data)
+
+			get_parent().add_child.call_deferred(scattered)
+
+			var angle := base_angle + (TAU / float(total)) * float(i) + randf_range(-0.35, 0.35)
+			var distance := randf_range(70.0, 155.0)
+			var target_pos := global_position + Vector2.from_angle(angle) * distance
+
+			var scatter_tween := scattered.create_tween()
+			scatter_tween.tween_property(scattered, "global_position", target_pos, 0.38)\
+				.set_trans(Tween.TRANS_QUAD)\
+				.set_ease(Tween.EASE_OUT)
+
+	carried_items.clear()
+	_emit_status()
+
+func die(reason: String = "All follower ants have fallen!") -> void:
 	if is_dead:
 		return
 	is_dead = true
 	velocity = Vector2.ZERO
 	is_huddling = false
+	scatter_all_items_on_death()
 	play_hit_flash()
 	_update_animation(false)
 	_sync_shadow()
@@ -138,13 +302,18 @@ func teleport_squad(target_pos: Vector2) -> void:
 			if f.has_method("reset_follow_history"):
 				f.reset_follow_history()
 
-	var cam := get_node_or_null("Camera2D") as Camera2D
 	if cam != null:
+		shake_strength = 0.0
+		stomp_strength = 0.0
+		swipe_offset_x = 0.0
+		swipe_tilt_rad = 0.0
+		cam.offset = Vector2.ZERO
+		cam.rotation = 0.0
 		cam.reset_smoothing()
 
 func spawn_initial_followers() -> void:
 	if follower_scene == null:
-		push_warning("Follower Scene di Inspector AntLeader masih kosong!")
+		push_warning("Follower Scene in AntLeader Inspector is empty!")
 		return
 
 	for i in range(starting_followers):
@@ -179,11 +348,10 @@ func remove_follower(follower: Node2D) -> void:
 		else:
 			follower.queue_free()
 
-	drop_heaviest_items_until_fit()
-
 	if followers.is_empty():
-		die("Seluruh semut follower telah gugur!")
+		die("All follower ants have fallen!")
 	else:
+		drop_heaviest_items_until_fit()
 		play_hit_flash()
 
 func get_huddle_position(follower: Node2D, radius: float) -> Vector2:
@@ -202,10 +370,10 @@ func apply_random_upgrade() -> String:
 	match choice:
 		0:
 			max_followers += 2
-			result_text = "+2 Max Ant Follower (Maks: %d)" % max_followers
+			result_text = "+2 Max Ant Followers (Max: %d)" % max_followers
 		1:
 			capacity_per_ant += 2
-			result_text = "+2 Carry Capacity/Semut (%d CC/semut)" % capacity_per_ant
+			result_text = "+2 Carry Capacity/Ant (%d CC/ant)" % capacity_per_ant
 		2:
 			speed += 45.0
 			result_text = "+Movement Speed (Speed: %.0f)" % speed
@@ -285,7 +453,7 @@ func drop_last_item() -> void:
 	if is_dead or carried_items.is_empty():
 		return
 	if item_scene == null:
-		push_warning("Item Scene di Inspector AntLeader masih kosong!")
+		push_warning("Item Scene in AntLeader Inspector is empty!")
 		return
 
 	var dropped: Dictionary = carried_items.pop_back()
