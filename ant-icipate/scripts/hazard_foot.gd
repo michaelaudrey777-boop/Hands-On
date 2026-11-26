@@ -46,6 +46,9 @@ func _process(delta: float) -> void:
 	queue_redraw()
 
 func _stomp() -> void:
+	if leader != null and is_instance_valid(leader) and leader.has_method("trigger_stomp_effect"):
+		leader.trigger_stomp_effect(global_position)
+	
 	state = State.STOMPED
 	timer = 0.0
 	swap_timer = 0.0
@@ -85,7 +88,7 @@ func _kill_ants_underneath() -> void:
 
 		if leader.followers.is_empty():
 			if leader.has_method("die"):
-				leader.die("Ant Leader terinjak saat tidak ada follower tersisa!")
+				leader.die("Ant Leader was stomped by a human foot!")
 		elif killed == 0:
 			leader.remove_follower(leader.followers.back())
 

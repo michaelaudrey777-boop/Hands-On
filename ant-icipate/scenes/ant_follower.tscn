@@ -67,7 +67,7 @@ script = ExtResource("1_xvavd")
 sprite_faces_left = true
 
 [node name="Shadow" type="Sprite2D" parent="." unique_id=894866759]
-modulate = Color(0, 0, 0, 0.3529412)
+modulate = Color(0.14117648, 0.078431375, 0.05882353, 0.49019608)
 position = Vector2(0, -33)
 scale = Vector2(0.5, 0.5)
 texture = ExtResource("2_nja82")

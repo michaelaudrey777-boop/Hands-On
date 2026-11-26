@@ -135,8 +135,16 @@ var hud_alert_message: String = ""
 var available_follower_cells: Array[Vector2i] = []
 var available_item_cells: Array[Vector2i] = []
 
+var reload_layer: CanvasLayer = null
+var reload_root: Control = null
+var reload_title_label: Label = null
+var reload_reason_label: Label = null
+var reload_stats_label: Label = null
+var reload_button: Button = null
+
 func _ready() -> void:
 	_auto_recover_missing_references()
+	_setup_reload_screen()
 
 	if leader != null:
 		if leader.has_signal("inventory_updated"):
@@ -172,6 +180,132 @@ func _ready() -> void:
 	follower_timer.autostart = true
 	follower_timer.timeout.connect(_on_spawn_timer_timeout)
 	add_child(follower_timer)
+
+func _setup_reload_screen() -> void:
+	reload_layer = CanvasLayer.new()
+	reload_layer.name = "ReloadScreenLayer"
+	reload_layer.layer = 20
+	add_child(reload_layer)
+
+	reload_root = Control.new()
+	reload_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	reload_root.visible = false
+	reload_root.modulate.a = 0.0
+	reload_layer.add_child(reload_root)
+
+	var backdrop := ColorRect.new()
+	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
+	backdrop.color = Color(0.06, 0.03, 0.03, 0.68)
+	reload_root.add_child(backdrop)
+
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	reload_root.add_child(center)
+
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(460, 0)
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.12, 0.08, 0.07, 0.94)
+	panel_style.border_color = Color(0.86, 0.26, 0.22, 0.95)
+	panel_style.set_border_width_all(3)
+	panel_style.set_corner_radius_all(14)
+	panel_style.content_margin_left = 32
+	panel_style.content_margin_right = 32
+	panel_style.content_margin_top = 28
+	panel_style.content_margin_bottom = 28
+	panel.add_theme_stylebox_override("panel", panel_style)
+	center.add_child(panel)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 14)
+	panel.add_child(vbox)
+
+	reload_title_label = Label.new()
+	reload_title_label.text = "SQUAD FALLEN"
+	reload_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	reload_title_label.add_theme_font_size_override("font_size", 32)
+	reload_title_label.add_theme_color_override("font_color", Color(0.98, 0.34, 0.28, 1.0))
+	vbox.add_child(reload_title_label)
+
+	reload_reason_label = Label.new()
+	reload_reason_label.text = "All follower ants have fallen!"
+	reload_reason_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	reload_reason_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	reload_reason_label.add_theme_font_size_override("font_size", 17)
+	reload_reason_label.add_theme_color_override("font_color", Color(0.95, 0.90, 0.85, 1.0))
+	vbox.add_child(reload_reason_label)
+
+	var sep := HSeparator.new()
+	vbox.add_child(sep)
+
+	reload_stats_label = Label.new()
+	reload_stats_label.text = "Round: 1 / 3  |  Total Points: 0"
+	reload_stats_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	reload_stats_label.add_theme_font_size_override("font_size", 16)
+	reload_stats_label.add_theme_color_override("font_color", Color(0.98, 0.84, 0.42, 1.0))
+	vbox.add_child(reload_stats_label)
+
+	var spacer := Control.new()
+	spacer.custom_minimum_size = Vector2(0, 6)
+	vbox.add_child(spacer)
+
+	reload_button = Button.new()
+	reload_button.text = "Play Again [R]"
+	reload_button.custom_minimum_size = Vector2(240, 48)
+	reload_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	reload_button.add_theme_font_size_override("font_size", 18)
+
+	var btn_normal := StyleBoxFlat.new()
+	btn_normal.bg_color = Color(0.76, 0.22, 0.18, 1.0)
+	btn_normal.set_corner_radius_all(8)
+	btn_normal.content_margin_left = 20
+	btn_normal.content_margin_right = 20
+	btn_normal.content_margin_top = 10
+	btn_normal.content_margin_bottom = 10
+
+	var btn_hover := StyleBoxFlat.new()
+	btn_hover.bg_color = Color(0.90, 0.28, 0.22, 1.0)
+	btn_hover.set_corner_radius_all(8)
+	btn_hover.content_margin_left = 20
+	btn_hover.content_margin_right = 20
+	btn_hover.content_margin_top = 10
+	btn_hover.content_margin_bottom = 10
+
+	var btn_pressed := StyleBoxFlat.new()
+	btn_pressed.bg_color = Color(0.56, 0.15, 0.12, 1.0)
+	btn_pressed.set_corner_radius_all(8)
+	btn_pressed.content_margin_left = 20
+	btn_pressed.content_margin_right = 20
+	btn_pressed.content_margin_top = 10
+	btn_pressed.content_margin_bottom = 10
+
+	reload_button.add_theme_stylebox_override("normal", btn_normal)
+	reload_button.add_theme_stylebox_override("hover", btn_hover)
+	reload_button.add_theme_stylebox_override("focus", btn_hover)
+	reload_button.add_theme_stylebox_override("pressed", btn_pressed)
+	reload_button.pressed.connect(_reload_game)
+	vbox.add_child(reload_button)
+
+func _show_reload_screen(title_text: String, reason_text: String, is_victory: bool = false) -> void:
+	if reload_root == null:
+		return
+
+	reload_title_label.text = title_text
+	reload_reason_label.text = reason_text
+	reload_stats_label.text = "Round Reached: %d / %d  |  Total Points: %d" % [current_round, ant_dens.size(), total_points]
+
+	var accent := Color(0.35, 0.92, 0.48, 1.0) if is_victory else Color(0.98, 0.34, 0.28, 1.0)
+	reload_title_label.add_theme_color_override("font_color", accent)
+
+	reload_root.visible = true
+	reload_root.modulate.a = 0.0
+	reload_button.grab_focus()
+
+	var tw := create_tween()
+	tw.tween_property(reload_root, "modulate:a", 1.0, 0.35).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+func _reload_game() -> void:
+	get_tree().reload_current_scene()
 
 func _auto_recover_missing_references() -> void:
 	if leader == null:
@@ -226,11 +360,11 @@ func _try_load_scene(paths: Array[String]) -> PackedScene:
 func _unhandled_input(event: InputEvent) -> void:
 	if (is_game_over or game_finished) and event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_R:
-			get_tree().reload_current_scene()
+			_reload_game()
 
 func _on_fog_started_closing() -> void:
 	if not is_game_over and not game_finished:
-		_show_hud_alert("THE FOG IS CLOSING IN! Segera kumpulkan kuota & maju ke Ant Den!", 4.5)
+		_show_hud_alert("THE FOG IS CLOSING IN! Gather the quota & advance to the Ant Den now!", 4.5)
 
 func _on_leader_died(reason: String) -> void:
 	if is_game_over or game_finished:
@@ -238,7 +372,10 @@ func _on_leader_died(reason: String) -> void:
 	is_game_over = true
 	if closing_fog != null and closing_fog.has_method("stop"):
 		closing_fog.stop()
-	_show_hud_alert("GAME OVER! %s\nTekan [R] untuk mengulang dari awal." % reason, 999.0)
+
+	await get_tree().create_timer(0.55).timeout
+	if is_inside_tree():
+		_show_reload_screen("SQUAD FALLEN", reason, false)
 
 func _setup_round(round_num: int) -> void:
 	current_round = round_num
@@ -329,7 +466,7 @@ func _on_den_reached(den: Area2D, leader_body: Node2D) -> void:
 	var req_water: int = den.get("required_water")
 
 	if current_food < req_food or current_water < req_water:
-		_show_hud_alert("Kuota belum cukup! Butuh %d Food & %d Water." % [req_food, req_water], 3.5)
+		_show_hud_alert("Quota not met! Need %d Food & %d Water." % [req_food, req_water], 3.5)
 		return
 
 	var deposit: Dictionary = leader_body.deposit_all_items()
@@ -351,13 +488,13 @@ func _on_den_reached(den: Area2D, leader_body: Node2D) -> void:
 			upgrade_msg = leader_body.apply_random_upgrade()
 
 		_setup_round(current_round + 1)
-		_show_hud_alert("ROUND %d SELESAI! (+%d Poin)\nUpgrade Acak: %s" % [current_round - 1, earned_points, upgrade_msg], 5.0)
+		_show_hud_alert("ROUND %d COMPLETE! (+%d Points)\nRandom Upgrade: %s" % [current_round - 1, earned_points, upgrade_msg], 5.0)
 	else:
 		game_finished = true
 		if closing_fog != null and closing_fog.has_method("stop"):
 			closing_fog.stop()
 		den.set_den_state(false, true)
-		_show_hud_alert("SEMUA ANT DEN SELESAI! Total Poin Akhir: %d\nTekan [R] untuk bermain lagi." % total_points, 999.0)
+		_show_reload_screen("MISSION COMPLETE!", "All Ant Dens have been supplied!", true)
 
 func _show_hud_alert(msg: String, duration: float) -> void:
 	hud_alert_message = msg
@@ -618,9 +755,9 @@ func _refresh_hud() -> void:
 	var warning := " [OVERWEIGHT -90% SPEED!]" if ui_overweight else ""
 	var alert_line := ("\n>>> %s <<<" % hud_alert_message) if hud_alert_message != "" else ""
 	status_label.text = (
-		"ROUND %d / %d  |  Poin: %d\n" % [current_round, ant_dens.size(), total_points] +
-		"Semut Follower: %d / %d\n" % [ui_followers, ui_max_followers] +
-		"Kapasitas: %d / %d CC%s\n" % [ui_weight, ui_max_capacity, warning] +
+		"ROUND %d / %d  |  Points: %d\n" % [current_round, ant_dens.size(), total_points] +
+		"Follower Ants: %d / %d\n" % [ui_followers, ui_max_followers] +
+		"Capacity: %d / %d CC%s\n" % [ui_weight, ui_max_capacity, warning] +
 		"Food: %d / %d  |  Water: %d / %d%s" % [ui_food, food_quota, ui_water, water_quota, alert_line]
 	)
 
