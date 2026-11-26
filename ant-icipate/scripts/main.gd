@@ -5,6 +5,11 @@ extends Node2D
 @export var initial_spawn_delay: float = 8.0
 @export var spawn_interval: float = 9.0
 
+@export_group("Intro Map Cutscene")
+@export var intro_map_texture: Texture2D
+@export var intro_memorize_duration: float = 6.0
+@export var allow_skip_intro: bool = true
+
 @export_group("Round Loop & Ant Dens")
 @export var ant_dens: Array[Area2D] = []
 @export var round_start_markers: Array[Marker2D] = []
@@ -123,6 +128,8 @@ var food_quota: int = 32
 var water_quota: int = 21
 var game_finished: bool = false
 var is_game_over: bool = false
+var is_intro_playing: bool = false
+var intro_skip_requested: bool = false
 
 var ui_followers: int = 3
 var ui_max_followers: int = 5
@@ -166,6 +173,11 @@ func _ready() -> void:
 
 	_setup_round(1)
 
+	if intro_map_texture != null and intro_memorize_duration > 0.0:
+		await _play_intro_map_sequence()
+		if not is_inside_tree():
+			return
+
 	_start_item_spawn_loop()
 	_start_hazard_loop()
 	_start_hand_loop()
@@ -181,6 +193,170 @@ func _ready() -> void:
 	follower_timer.autostart = true
 	follower_timer.timeout.connect(_on_spawn_timer_timeout)
 	add_child(follower_timer)
+
+func _play_intro_map_sequence() -> void:
+	is_intro_playing = true
+	intro_skip_requested = false
+	get_tree().paused = true
+
+	var audio := AudioManager.get_instance(get_tree())
+	var prev_audio_mode := Node.PROCESS_MODE_INHERIT
+	if audio != null:
+		prev_audio_mode = audio.process_mode
+		audio.process_mode = Node.PROCESS_MODE_ALWAYS
+
+	var intro_layer := CanvasLayer.new()
+	intro_layer.name = "IntroMapLayer"
+	intro_layer.layer = 30
+	intro_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(intro_layer)
+
+	var root := Control.new()
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.focus_mode = Control.FOCUS_ALL
+	root.mouse_filter = Control.MOUSE_FILTER_STOP
+	intro_layer.add_child(root)
+	root.grab_focus()
+
+	root.gui_input.connect(func(event: InputEvent) -> void:
+		if not allow_skip_intro:
+			return
+		if event is InputEventKey and event.pressed and not event.echo:
+			if event.keycode in [KEY_SPACE, KEY_ENTER, KEY_KP_ENTER, KEY_ESCAPE]:
+				intro_skip_requested = true
+				root.accept_event()
+		elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+			intro_skip_requested = true
+			root.accept_event()
+	)
+
+	var backdrop := ColorRect.new()
+	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
+	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	backdrop.color = Color(0.05, 0.04, 0.03, 0.78)
+	root.add_child(backdrop)
+
+	var vp_size := get_viewport().get_visible_rect().size
+	var tex_size := intro_map_texture.get_size()
+	var aspect := tex_size.x / maxf(1.0, tex_size.y)
+	var map_h := minf(vp_size.y * 0.76, vp_size.x * 0.84 / maxf(0.1, aspect))
+	var map_w := map_h * aspect
+	var base_pos := Vector2((vp_size.x - map_w) * 0.5, (vp_size.y - map_h) * 0.48)
+
+	var map_rect := TextureRect.new()
+	map_rect.texture = intro_map_texture
+	map_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	map_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	map_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	map_rect.size = Vector2(map_w, map_h)
+	map_rect.position = base_pos
+	map_rect.pivot_offset = map_rect.size * 0.5
+	map_rect.modulate.a = 0.0
+	map_rect.scale = Vector2(0.92, 0.92)
+	root.add_child(map_rect)
+
+	var top_label := Label.new()
+	top_label.text = "MEMORIZE THE ROUTE TO ALL 3 ANT DENS!"
+	top_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	top_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	top_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	top_label.offset_top = 26.0
+	top_label.add_theme_font_size_override("font_size", 28)
+	top_label.add_theme_color_override("font_color", Color(1.0, 0.92, 0.72, 1.0))
+	top_label.add_theme_constant_override("outline_size", 5)
+	top_label.add_theme_color_override("font_outline_color", Color(0.08, 0.05, 0.03, 0.95))
+	root.add_child(top_label)
+
+	var bottom_label := Label.new()
+	bottom_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bottom_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	bottom_label.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	bottom_label.offset_bottom = -26.0
+	bottom_label.offset_top = -66.0
+	bottom_label.add_theme_font_size_override("font_size", 20)
+	bottom_label.add_theme_color_override("font_color", Color(0.95, 0.88, 0.78, 0.95))
+	bottom_label.add_theme_constant_override("outline_size", 4)
+	bottom_label.add_theme_color_override("font_outline_color", Color(0.08, 0.05, 0.03, 0.95))
+	root.add_child(bottom_label)
+
+	var enter_tw := intro_layer.create_tween().set_parallel(true)
+	enter_tw.tween_property(map_rect, "modulate:a", 1.0, 0.35)
+	enter_tw.tween_property(map_rect, "scale", Vector2.ONE, 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	await enter_tw.finished
+
+	var remaining := intro_memorize_duration
+	var flutter_time := 0.0
+	while remaining > 0.0 and not intro_skip_requested and is_inside_tree():
+		var dt := get_process_delta_time()
+		remaining -= dt
+		flutter_time += dt
+
+		if not root.has_focus():
+			root.grab_focus()
+
+		var skip_hint := "  |  [SPACE / CLICK] Ready" if allow_skip_intro else ""
+		bottom_label.text = "Wind picking up in %ds...%s" % [ceili(maxf(0.0, remaining)), skip_hint]
+
+		if remaining <= 0.75:
+			var intensity := (0.75 - remaining) / 0.75
+			map_rect.position = base_pos + Vector2(
+				sin(flutter_time * 42.0) * 10.0 * intensity,
+				cos(flutter_time * 36.0) * 6.0 * intensity
+			)
+			map_rect.rotation_degrees = sin(flutter_time * 32.0) * 3.5 * intensity
+		else:
+			map_rect.position = base_pos + Vector2(0.0, sin(flutter_time * 2.2) * 5.0)
+			map_rect.rotation_degrees = sin(flutter_time * 1.5) * 0.8
+
+		await get_tree().process_frame
+
+	if not is_inside_tree():
+		return
+
+	top_label.visible = false
+	bottom_label.visible = false
+
+	if audio != null:
+		audio.play_map_blown_off()
+
+	_spawn_intro_wind_streaks(root, vp_size)
+
+	var blow_tw := intro_layer.create_tween().set_parallel(true)
+	blow_tw.tween_property(map_rect, "position", base_pos + Vector2(vp_size.x * 1.25, -vp_size.y * 0.42), 1.05).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	blow_tw.tween_property(map_rect, "rotation_degrees", 34.0, 1.05).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	blow_tw.tween_property(map_rect, "scale", Vector2(1.12, 0.76), 1.05).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	blow_tw.tween_property(map_rect, "modulate:a", 0.0, 0.85).set_delay(0.2)
+	blow_tw.tween_property(backdrop, "color:a", 0.0, 0.95).set_delay(0.1)
+	await blow_tw.finished
+
+	if is_instance_valid(intro_layer):
+		intro_layer.queue_free()
+
+	if audio != null and is_instance_valid(audio):
+		audio.process_mode = prev_audio_mode
+
+	is_intro_playing = false
+	get_tree().paused = false
+	_show_hud_alert("The wind blew your map away! Reach Ant Den 1!", 4.0)
+
+func _spawn_intro_wind_streaks(parent: Control, vp_size: Vector2) -> void:
+	for i in range(14):
+		var streak := ColorRect.new()
+		var w := randf_range(140.0, 340.0)
+		var h := randf_range(3.0, 6.0)
+		streak.size = Vector2(w, h)
+		streak.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		streak.color = Color(0.96, 0.93, 0.86, randf_range(0.25, 0.55))
+		streak.rotation_degrees = -12.0
+		var start_y := randf_range(vp_size.y * 0.1, vp_size.y * 0.9)
+		streak.position = Vector2(-w - randf_range(0.0, 260.0), start_y)
+		parent.add_child(streak)
+
+		var tw := parent.create_tween()
+		var delay := randf_range(0.0, 0.35)
+		var dur := randf_range(0.45, 0.75)
+		tw.tween_property(streak, "position", Vector2(vp_size.x + 200.0, start_y - 260.0), dur).set_delay(delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		tw.finished.connect(streak.queue_free)
 
 func _setup_reload_screen() -> void:
 	reload_layer = CanvasLayer.new()
@@ -426,6 +602,16 @@ func _setup_round(round_num: int) -> void:
 		var marker := round_start_markers[idx]
 		if marker != null:
 			leader.teleport_squad(marker.global_position)
+			var cam := get_viewport().get_camera_2d()
+			if cam == null and leader != null:
+				cam = leader.get_node_or_null("Camera2D")
+			if cam != null:
+				cam.limit_left = 0
+				cam.limit_top = -8000
+				cam.limit_right = 24000
+				cam.limit_bottom = 1000
+				cam.reset_smoothing()
+				cam.force_update_scroll()
 
 	_activate_round_borders()
 	_start_round_fog(round_num)
@@ -688,7 +874,7 @@ func _get_follower_spawn_position() -> Vector2:
 			randf_range(cell_min.y, cell_max.y)
 		)
 
-		if not _is_blocked_by_obstacle(candidate_pos, 110.0) and (leader == null or candidate_pos.distance_to(leader.global_position) >= min_distance_from_leader):
+		if not _is_blocked_by_obstacle(candidate_pos, follower_obstacle_clearance) and (leader == null or candidate_pos.distance_to(leader.global_position) >= min_distance_from_leader):
 			return candidate_pos
 
 	for i in range(25):
@@ -696,7 +882,7 @@ func _get_follower_spawn_position() -> Vector2:
 			randf_range(eff_min.x, eff_max.x),
 			randf_range(eff_min.y, eff_max.y)
 		)
-		if not _is_blocked_by_obstacle(random_pos, 110.0) and (leader == null or random_pos.distance_to(leader.global_position) >= min_distance_from_leader):
+		if not _is_blocked_by_obstacle(random_pos, follower_obstacle_clearance) and (leader == null or random_pos.distance_to(leader.global_position) >= min_distance_from_leader):
 			return random_pos
 
 	return Vector2.INF
@@ -741,7 +927,7 @@ func _get_spaced_item_position() -> Vector2:
 	return Vector2.INF
 
 func _is_valid_item_position(pos: Vector2) -> bool:
-	if _is_blocked_by_obstacle(pos, 125.0):
+	if _is_blocked_by_obstacle(pos, item_obstacle_clearance):
 		return false
 
 	if closing_fog != null and closing_fog.has_method("is_in_fog") and closing_fog.is_in_fog(pos, 250.0):
