@@ -27,7 +27,10 @@
 [ext_resource type="Texture2D" uid="uid://q0cltde4ss7l" path="res://assets/resources/resource_Meat1.png" id="8_jscy8"]
 [ext_resource type="Script" uid="uid://v5pbtmoomxu5" path="res://scripts/closing_fog.gd" id="8_tipki"]
 [ext_resource type="Texture2D" uid="uid://cpjtyiwwy1kix" path="res://assets/resources/resource_Meat2.png" id="9_pm3ni"]
+[ext_resource type="Texture2D" uid="uid://s1fpwrww5cy1" path="res://assets/ui/badge_antamount.png" id="9_xhfw6"]
+[ext_resource type="Texture2D" uid="uid://c7gpn8cva8nvp" path="res://assets/ui/badge_carry.png" id="10_1epgm"]
 [ext_resource type="Texture2D" uid="uid://n7lfykogwfuo" path="res://assets/hazards/foot_green.png" id="10_eb6dy"]
+[ext_resource type="Texture2D" uid="uid://c54gsfxhdvglj" path="res://assets/ui/badge_speed.png" id="11_152kg"]
 [ext_resource type="Texture2D" uid="uid://cxkw7ol5mngb" path="res://assets/hazards/foot_blue (1).png" id="11_jbj1t"]
 [ext_resource type="Texture2D" uid="uid://j8hg6uwe5yl3" path="res://assets/hazards/foot_coolerred.png" id="12_muem4"]
 [ext_resource type="Texture2D" uid="uid://dq8m0o1qof7ni" path="res://assets/background/ground/ground tile variation 1 (harsh).png" id="14_yc10j"]
@@ -249,6 +252,9 @@ ui_resources_texture = ExtResource("5_od4ux")
 ui_warningboard_texture = ExtResource("6_xhfw6")
 ui_menubg_texture = ExtResource("7_1epgm")
 ui_button_texture = ExtResource("8_152kg")
+badge_squad_texture = ExtResource("9_xhfw6")
+badge_capacity_texture = ExtResource("10_1epgm")
+badge_speed_texture = ExtResource("11_152kg")
 story_slides = Array[Texture2D]([ExtResource("3_dnhof"), ExtResource("4_1v6qk"), ExtResource("5_augu2"), ExtResource("6_tm6hj"), ExtResource("7_kf5aa")])
 intro_map_texture = ExtResource("3_bjg73")
 intro_memorize_duration = 10.0
