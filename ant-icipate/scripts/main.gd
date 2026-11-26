@@ -355,13 +355,16 @@ func _setup_custom_hud() -> void:
 		ant_bar.texture = ui_antbar_texture
 		ant_bar.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		ant_bar.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		ant_bar.custom_minimum_size = Vector2(240, 124)
-		ant_bar.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		ant_bar.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+		ant_bar.offset_left = 20.0
+		ant_bar.offset_right = 260.0
+		ant_bar.offset_top = -140.0
+		ant_bar.offset_bottom = -16.0
 		ant_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		left_vbox.add_child(ant_bar)
+		root.add_child(ant_bar)
 
 		ant_bar_label = Label.new()
-		ant_bar_label.anchor_left = 0.48
+		ant_bar_label.anchor_left = 0.44
 		ant_bar_label.anchor_right = 0.92
 		ant_bar_label.anchor_top = 0.36
 		ant_bar_label.anchor_bottom = 0.64
@@ -395,7 +398,7 @@ func _setup_custom_hud() -> void:
 
 	if ui_resources_texture != null:
 		var res_grid := GridContainer.new()
-		res_grid.columns = 2
+		res_grid.columns = 1
 		res_grid.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 		res_grid.add_theme_constant_override("h_separation", 8)
 		res_grid.add_theme_constant_override("v_separation", 4)
