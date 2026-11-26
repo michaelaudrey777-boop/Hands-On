@@ -47,6 +47,8 @@ var carried_items: Array[Dictionary] = []
 var nearby_items: Array[Area2D] = []
 var facing: Vector2 = Vector2.RIGHT
 var flash_tween: Tween = null
+var is_spawning_initial: bool = false
+var step_dust_timer: float = 0.0
 
 var shake_strength: float = 0.0
 var shake_angle: float = 0.0
@@ -141,8 +143,12 @@ func _process(delta: float) -> void:
 	cam.rotation = swipe_tilt_rad
 
 func _physics_process(delta: float) -> void:
+	var audio := AudioManager.get_instance(get_tree())
+
 	if is_dead:
 		velocity = Vector2.ZERO
+		if audio != null:
+			audio.set_walking(false)
 		_update_animation(false)
 		_sync_shadow()
 		return
@@ -171,6 +177,17 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 
 	var is_moving := input.length() > 0.1 or velocity.length() > 15.0
+	if audio != null:
+		audio.set_walking(is_moving, is_huddling)
+
+	if is_moving:
+		step_dust_timer += delta
+		if step_dust_timer >= 0.22:
+			step_dust_timer = 0.0
+			VFX.spawn_step_dust(get_parent(), global_position)
+	else:
+		step_dust_timer = 0.15
+
 	_update_animation(is_moving)
 	_sync_shadow()
 
@@ -235,6 +252,12 @@ func trigger_screen_hit_effect(multiplier: float = 1.0) -> void:
 func play_hit_flash() -> void:
 	trigger_screen_hit_effect(1.35 if is_dead else 1.0)
 
+	var audio := AudioManager.get_instance(get_tree())
+	if audio != null:
+		audio.play_getting_hit()
+
+	VFX.spawn_hit_burst(get_parent(), global_position)
+
 	if sprite == null:
 		return
 	if flash_tween != null and flash_tween.is_valid():
@@ -283,6 +306,11 @@ func die(reason: String = "All follower ants have fallen!") -> void:
 	is_dead = true
 	velocity = Vector2.ZERO
 	is_huddling = false
+
+	var audio := AudioManager.get_instance(get_tree())
+	if audio != null:
+		audio.set_walking(false)
+
 	scatter_all_items_on_death()
 	play_hit_flash()
 	_update_animation(false)
@@ -316,12 +344,14 @@ func spawn_initial_followers() -> void:
 		push_warning("Follower Scene in AntLeader Inspector is empty!")
 		return
 
+	is_spawning_initial = true
 	for i in range(starting_followers):
 		var follower := follower_scene.instantiate() as Node2D
 		var spacing: float = follower.get("follow_distance") if follower.get("follow_distance") != null else 128.0
 		follower.global_position = global_position + Vector2(0, (i + 1) * spacing)
 		get_parent().add_child.call_deferred(follower)
 		recruit_follower(follower)
+	is_spawning_initial = false
 
 func recruit_follower(follower: Node2D) -> void:
 	if is_dead or follower in followers or followers.size() >= max_followers:
@@ -330,6 +360,13 @@ func recruit_follower(follower: Node2D) -> void:
 	var target_node: Node2D = self if followers.is_empty() else followers.back()
 	followers.append(follower)
 	follower.set_target(target_node, self)
+
+	if not is_spawning_initial:
+		VFX.spawn_recruit_sparkle(get_parent(), follower.global_position)
+		var audio := AudioManager.get_instance(get_tree())
+		if audio != null:
+			audio.play_badge()
+
 	_emit_status()
 
 func remove_follower(follower: Node2D) -> void:
@@ -343,6 +380,7 @@ func remove_follower(follower: Node2D) -> void:
 		followers[idx].set_target(new_target, self)
 
 	if is_instance_valid(follower):
+		VFX.spawn_hit_burst(get_parent(), follower.global_position)
 		if follower.has_method("die_with_flash"):
 			follower.die_with_flash()
 		else:
@@ -443,9 +481,18 @@ func try_pickup_item() -> void:
 		"size_multiplier": closest_item.get("size_multiplier")
 	}
 
+	var pickup_pos := closest_item.global_position
+	var pickup_color: Color = item_data["color"] if item_data["color"] != null else Color.WHITE
+	var pickup_name: String = str(item_data["name"])
+
 	carried_items.append(item_data)
 	nearby_items.erase(closest_item)
 	closest_item.queue_free()
+
+	VFX.spawn_pickup(get_parent(), pickup_pos, pickup_color)
+	var audio := AudioManager.get_instance(get_tree())
+	if audio != null:
+		audio.play_item_pickup(pickup_name)
 
 	_emit_status()
 

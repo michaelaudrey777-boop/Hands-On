@@ -1,0 +1,19 @@
+[remap]
+
+importer="oggvorbisstr"
+type="AudioStreamOggVorbis"
+uid="uid://dte0bs71upeko"
+path="res://.godot/imported/ANT-icipated Delivery Button sfx.ogg-9da08d679eb3309c254c07d275c56156.oggvorbisstr"
+
+[deps]
+
+source_file="res://audio/SFX/ANT-icipated Delivery Button sfx.ogg"
+dest_files=["res://.godot/imported/ANT-icipated Delivery Button sfx.ogg-9da08d679eb3309c254c07d275c56156.oggvorbisstr"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

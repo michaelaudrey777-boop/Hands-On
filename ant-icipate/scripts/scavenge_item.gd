@@ -9,10 +9,21 @@ extends Area2D
 @export var item_texture: Texture2D = null
 @export var size_multiplier: float = 1.0
 
+@export_group("Sprite Shadow")
+@export var shadow_enabled: bool = true
+@export var shadow_color: Color = Color(0.0, 0.0, 0.0, 0.45)
+@export var shadow_offset: Vector2 = Vector2(6.0, 14.0)
+@export var shadow_scale: Vector2 = Vector2(1.0, 0.92)
+
+@export_group("Pickup Indicator")
+@export var prompt_font_size: int = 62
+@export var prompt_extra_height: float = 28.0
+
 @onready var sprite: Sprite2D = get_node_or_null("Sprite2D")
 
 var base_sprite_scale: Vector2 = Vector2.ONE
 var base_sprite_pos: Vector2 = Vector2.ZERO
+var base_z_index: int = 0
 var bob_time: float = 0.0
 var nearby_leader: Node2D = null
 var is_closest_target: bool = false
@@ -20,6 +31,7 @@ var is_closest_target: bool = false
 func _ready() -> void:
 	add_to_group("items")
 	bob_time = randf() * TAU
+	base_z_index = z_index
 
 	if sprite != null:
 		base_sprite_scale = sprite.scale
@@ -57,11 +69,9 @@ func _process(delta: float) -> void:
 	if sprite != null:
 		sprite.position.y = base_sprite_pos.y + sin(bob_time) * 3.0
 
-	var was_closest := is_closest_target
 	is_closest_target = _check_if_closest_to_leader()
-
-	if is_closest_target or was_closest:
-		queue_redraw()
+	z_index = (base_z_index + 20) if is_closest_target else base_z_index
+	queue_redraw()
 
 func _check_if_closest_to_leader() -> bool:
 	if nearby_leader == null or not is_instance_valid(nearby_leader):
@@ -83,40 +93,92 @@ func _check_if_closest_to_leader() -> bool:
 
 	return closest == self
 
+func _get_visual_half_extents() -> Vector2:
+	var fallback := 22.0 * size_multiplier
+	if sprite != null and sprite.texture != null:
+		var tex_size := sprite.texture.get_size()
+		return Vector2(
+			maxf(fallback, (tex_size.x * absf(sprite.scale.x)) * 0.5),
+			maxf(fallback, (tex_size.y * absf(sprite.scale.y)) * 0.5)
+		)
+	return Vector2(fallback, fallback)
+
 func _draw() -> void:
 	var r := 22.0 * size_multiplier
+	var half_ext := _get_visual_half_extents()
+	var bob_factor := 1.0 - sin(bob_time) * 0.04
 
-	draw_circle(Vector2(0, 6), r * 1.45, Color(item_color.r, item_color.g, item_color.b, 0.16))
+	draw_circle(Vector2(0, 6), maxf(r * 1.45, half_ext.x * 1.15), Color(item_color.r, item_color.g, item_color.b, 0.14))
 
-	draw_set_transform(Vector2(6.0, 15.0), 0.0, Vector2(1.15, 0.55))
-	draw_circle(Vector2.ZERO, r * 0.95, Color(0.14, 0.08, 0.06, 0.46))
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	if shadow_enabled:
+		if sprite != null and sprite.texture != null:
+			var tex := sprite.texture
+			var draw_size := tex.get_size() * Vector2(absf(sprite.scale.x), absf(sprite.scale.y))
+			var flip_x := -1.0 if sprite.flip_h else 1.0
+			var flip_y := -1.0 if sprite.flip_v else 1.0
+			var final_scale := Vector2(
+				flip_x * shadow_scale.x * bob_factor,
+				flip_y * shadow_scale.y * bob_factor
+			)
+			var shadow_pos := base_sprite_pos + shadow_offset
+			var rect_pos := (-draw_size * 0.5) + sprite.offset
+
+			draw_set_transform(shadow_pos, sprite.rotation, final_scale)
+			draw_texture_rect(tex, Rect2(rect_pos, draw_size), false, shadow_color)
+			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		else:
+			draw_circle(shadow_offset, r * 0.85 * bob_factor, shadow_color)
 
 	if sprite == null or sprite.texture == null:
 		draw_circle(Vector2.ZERO, r * 0.85, item_color)
 
 	if is_closest_target and nearby_leader != null:
 		var overweight: bool = nearby_leader.has_method("is_overweight") and nearby_leader.is_overweight()
-		var ring_color := Color(1.0, 0.32, 0.32, 0.9) if overweight else Color(1.0, 0.88, 0.35, 0.9)
-		draw_arc(Vector2(0, 4), r * 1.55, 0.0, TAU, 32, ring_color, 3.0, true)
+		var ring_color := Color(1.0, 0.32, 0.32, 0.95) if overweight else Color(1.0, 0.88, 0.35, 0.95)
+		var ring_radius := maxf(r * 1.65, maxf(half_ext.x, half_ext.y) * 1.25)
+		draw_arc(Vector2(0, 4), ring_radius, 0.0, TAU, 40, ring_color, 4.0, true)
 
 		var font := ThemeDB.fallback_font
 		if font != null:
 			var label_text := "[FULL]" if overweight else "[E]"
-			var font_size := 15
+			var pulse := 1.0 + sin(bob_time * 2.2) * 0.06
+			var font_size := int(round(float(prompt_font_size) * pulse))
+
 			var text_size := font.get_string_size(label_text, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size)
-			var badge_pos := Vector2(0.0, -r - 24.0)
+			var ascent := font.get_ascent(font_size)
+			var descent := font.get_descent(font_size)
+			var total_h := ascent + descent
+
+			var pad_x := 18.0
+			var pad_y := 10.0
+			var box_w := text_size.x + pad_x * 2.0
+			var box_h := total_h + pad_y * 2.0
+
+			var box_bottom_y := -half_ext.y - prompt_extra_height + sin(bob_time * 2.2) * 3.0
 			var bg_rect := Rect2(
-				badge_pos.x - text_size.x * 0.5 - 8.0,
-				badge_pos.y - text_size.y + 2.0,
-				text_size.x + 16.0,
-				text_size.y + 6.0
+				-box_w * 0.5,
+				box_bottom_y - box_h,
+				box_w,
+				box_h
 			)
-			draw_rect(bg_rect, Color(0.10, 0.07, 0.05, 0.82), true)
-			draw_rect(bg_rect, ring_color, false, 1.5)
+
+			draw_rect(bg_rect, Color(0.08, 0.05, 0.04, 0.90), true)
+			draw_rect(bg_rect, ring_color, false, 3.5)
+
+			var text_pos := Vector2(-text_size.x * 0.5, bg_rect.position.y + pad_y + ascent)
+			draw_string_outline(
+				font,
+				text_pos,
+				label_text,
+				HORIZONTAL_ALIGNMENT_LEFT,
+				-1,
+				font_size,
+				6,
+				Color(0.0, 0.0, 0.0, 0.95)
+			)
 			draw_string(
 				font,
-				Vector2(badge_pos.x - text_size.x * 0.5, badge_pos.y),
+				text_pos,
 				label_text,
 				HORIZONTAL_ALIGNMENT_LEFT,
 				-1,
@@ -135,4 +197,5 @@ func _on_body_exited(body: Node2D) -> void:
 	if body == nearby_leader:
 		nearby_leader = null
 		is_closest_target = false
+		z_index = base_z_index
 		queue_redraw()

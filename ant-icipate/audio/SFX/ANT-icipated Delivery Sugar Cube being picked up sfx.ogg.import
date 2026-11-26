@@ -1,0 +1,19 @@
+[remap]
+
+importer="oggvorbisstr"
+type="AudioStreamOggVorbis"
+uid="uid://gp5pcu0xd0k6"
+path="res://.godot/imported/ANT-icipated Delivery Sugar Cube being picked up sfx.ogg-363108ef82f659ed1e71c5099dd25701.oggvorbisstr"
+
+[deps]
+
+source_file="res://audio/SFX/ANT-icipated Delivery Sugar Cube being picked up sfx.ogg"
+dest_files=["res://.godot/imported/ANT-icipated Delivery Sugar Cube being picked up sfx.ogg-363108ef82f659ed1e71c5099dd25701.oggvorbisstr"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

@@ -49,7 +49,6 @@ extends Node2D
 @export var hazard_interval_fallback: float = 4.0
 @export var hazard_spawn_range: float = 2200.0
 @export var target_ants_chance: float = 0.55
-@export var den_safe_radius: float = 450.0
 @export var min_distance_between_hazards: float = 220.0
 
 @export_group("Hazard Hand Settings")
@@ -305,7 +304,12 @@ func _show_reload_screen(title_text: String, reason_text: String, is_victory: bo
 	tw.tween_property(reload_root, "modulate:a", 1.0, 0.35).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 func _reload_game() -> void:
-	get_tree().reload_current_scene()
+	var audio := AudioManager.get_instance(get_tree())
+	if audio != null:
+		audio.play_button()
+		await get_tree().create_timer(0.12).timeout
+	if is_inside_tree():
+		get_tree().reload_current_scene()
 
 func _auto_recover_missing_references() -> void:
 	if leader == null:
@@ -364,6 +368,9 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _on_fog_started_closing() -> void:
 	if not is_game_over and not game_finished:
+		var audio := AudioManager.get_instance(get_tree())
+		if audio != null:
+			audio.play_map_blown_off()
 		_show_hud_alert("THE FOG IS CLOSING IN! Gather the quota & advance to the Ant Den now!", 4.5)
 
 func _on_leader_died(reason: String) -> void:
@@ -372,6 +379,10 @@ func _on_leader_died(reason: String) -> void:
 	is_game_over = true
 	if closing_fog != null and closing_fog.has_method("stop"):
 		closing_fog.stop()
+
+	var audio := AudioManager.get_instance(get_tree())
+	if audio != null:
+		audio.set_bgm_dimmed(true)
 
 	await get_tree().create_timer(0.55).timeout
 	if is_inside_tree():
@@ -481,6 +492,13 @@ func _on_den_reached(den: Area2D, leader_body: Node2D) -> void:
 		(surviving_ants * 5)
 	)
 	total_points += earned_points
+
+	var audio := AudioManager.get_instance(get_tree())
+	if audio != null:
+		audio.play_badge()
+		audio.set_walking(false)
+
+	VFX.spawn_celebration(self, den.global_position)
 
 	if current_round < ant_dens.size():
 		var upgrade_msg := ""
@@ -828,12 +846,12 @@ func _spawn_hand() -> void:
 
 func _get_hand_position() -> Vector2:
 	var candidates: Array[Vector2] = []
-	if not _is_in_safe_zone(leader.global_position):
+	if not _is_invalid_hazard_pos(leader.global_position):
 		candidates.append(leader.global_position)
 
 	var squad: Array = leader.get("followers")
 	for f in squad:
-		if is_instance_valid(f) and not _is_in_safe_zone(f.global_position):
+		if is_instance_valid(f) and not _is_invalid_hazard_pos(f.global_position):
 			candidates.append(f.global_position)
 
 	if candidates.is_empty():
@@ -842,22 +860,14 @@ func _get_hand_position() -> Vector2:
 	for i in range(12):
 		var base: Vector2 = candidates.pick_random()
 		var pos := base + Vector2(randf_range(-140.0, 140.0), randf_range(-55.0, 55.0))
-		if not _is_in_safe_zone(pos):
+		if not _is_invalid_hazard_pos(pos):
 			return pos
 
 	return Vector2.INF
 
-func _is_in_safe_zone(pos: Vector2) -> bool:
+func _is_invalid_hazard_pos(pos: Vector2) -> bool:
 	if closing_fog != null and closing_fog.has_method("is_in_fog") and closing_fog.is_in_fog(pos, 100.0):
 		return true
-
-	for den in ant_dens:
-		if is_instance_valid(den) and pos.distance_to(den.global_position) < den_safe_radius:
-			return true
-
-	for marker in round_start_markers:
-		if is_instance_valid(marker) and pos.distance_to(marker.global_position) < den_safe_radius:
-			return true
 
 	for h in get_tree().get_nodes_in_group("hazards"):
 		if is_instance_valid(h) and pos.distance_to(h.global_position) < min_distance_between_hazards:
@@ -867,17 +877,17 @@ func _is_in_safe_zone(pos: Vector2) -> bool:
 
 func _get_foot_position() -> Vector2:
 	var ant_targets: Array[Vector2] = []
-	if not _is_in_safe_zone(leader.global_position):
+	if not _is_invalid_hazard_pos(leader.global_position):
 		ant_targets.append(leader.global_position)
 
 	var squad: Array = leader.get("followers")
 	for f in squad:
-		if is_instance_valid(f) and not _is_in_safe_zone(f.global_position):
+		if is_instance_valid(f) and not _is_invalid_hazard_pos(f.global_position):
 			ant_targets.append(f.global_position)
 
 	var item_targets: Array[Vector2] = []
 	for item in get_tree().get_nodes_in_group("items"):
-		if is_instance_valid(item) and not _is_in_safe_zone(item.global_position):
+		if is_instance_valid(item) and not _is_invalid_hazard_pos(item.global_position):
 			if item.global_position.distance_to(leader.global_position) <= hazard_spawn_range:
 				item_targets.append(item.global_position)
 
@@ -901,6 +911,6 @@ func _pick_offset_position(bases: Array[Vector2], max_offset: float) -> Vector2:
 	for i in range(15):
 		var base: Vector2 = bases.pick_random()
 		var candidate := base + Vector2(randf_range(-max_offset, max_offset), randf_range(-max_offset, max_offset))
-		if not _is_in_safe_zone(candidate):
+		if not _is_invalid_hazard_pos(candidate):
 			return candidate
 	return Vector2.INF

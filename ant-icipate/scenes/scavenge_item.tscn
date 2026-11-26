@@ -8,7 +8,8 @@ radius = 48.0
 
 [node name="ScavengeItem" type="Area2D" unique_id=888377966]
 script = ExtResource("1_60iq6")
-target_visual_size = 110.0
+prompt_font_size = 44
+prompt_extra_height = 16.0
 
 [node name="Shadow" type="Sprite2D" parent="." unique_id=1586589516]
 scale = Vector2(0.35, 0.35)
@@ -27,4 +28,8 @@ offset_left = -30.0
 offset_top = -72.0
 offset_right = 31.0
 offset_bottom = -49.0
+scale = Vector2(1.8, 1.8)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 6
+theme_override_font_sizes/font_size = 40
 text = "[E] Take"

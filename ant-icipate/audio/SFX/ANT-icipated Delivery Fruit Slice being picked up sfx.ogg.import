@@ -1,0 +1,19 @@
+[remap]
+
+importer="oggvorbisstr"
+type="AudioStreamOggVorbis"
+uid="uid://q3c71tffqye4"
+path="res://.godot/imported/ANT-icipated Delivery Fruit Slice being picked up sfx.ogg-ce16785e1acb96c6d347a427518cd87b.oggvorbisstr"
+
+[deps]
+
+source_file="res://audio/SFX/ANT-icipated Delivery Fruit Slice being picked up sfx.ogg"
+dest_files=["res://.godot/imported/ANT-icipated Delivery Fruit Slice being picked up sfx.ogg-ce16785e1acb96c6d347a427518cd87b.oggvorbisstr"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4
