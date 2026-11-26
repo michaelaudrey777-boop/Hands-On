@@ -5,6 +5,10 @@ extends Node2D
 @export var initial_spawn_delay: float = 8.0
 @export var spawn_interval: float = 9.0
 
+@export_group("Title Screen")
+@export var title_logo_texture: Texture2D
+@export var title_bg_texture: Texture2D
+
 @export_group("Custom UI Sprites")
 @export var ui_antbar_texture: Texture2D
 @export var ui_upgradebar_texture: Texture2D
@@ -189,6 +193,7 @@ var food_quota: int = 32
 var water_quota: int = 21
 var game_finished: bool = false
 var is_game_over: bool = false
+var is_title_open: bool = false
 var is_story_playing: bool = false
 var is_intro_playing: bool = false
 var is_pause_open: bool = false
@@ -256,10 +261,16 @@ func _ready() -> void:
 
 	_setup_round(1)
 
+	var has_title := (title_logo_texture != null)
 	var has_story := _has_valid_story_slides()
 	var has_map_intro := (intro_map_texture != null and intro_memorize_duration > 0.0)
 
-	if has_story or has_map_intro:
+	if has_title or has_story or has_map_intro:
+		if custom_hud_layer != null:
+			custom_hud_layer.visible = false
+		if status_label != null:
+			status_label.visible = false
+
 		get_tree().paused = true
 		var audio := AudioManager.get_instance(get_tree())
 		var prev_audio_mode := Node.PROCESS_MODE_INHERIT
@@ -267,10 +278,18 @@ func _ready() -> void:
 			prev_audio_mode = audio.process_mode
 			audio.process_mode = Node.PROCESS_MODE_ALWAYS
 
-		if has_story:
-			await _play_story_cutscene(audio)
+		var active_title_layer: CanvasLayer = null
+		if has_title:
+			active_title_layer = await _show_title_screen(audio)
 			if not is_inside_tree():
 				return
+
+		if has_story:
+			await _play_story_cutscene(audio, active_title_layer)
+			if not is_inside_tree():
+				return
+		elif active_title_layer != null and is_instance_valid(active_title_layer):
+			active_title_layer.queue_free()
 
 		if has_map_intro:
 			await _play_intro_map_sequence(audio)
@@ -281,7 +300,14 @@ func _ready() -> void:
 			audio.process_mode = prev_audio_mode
 
 		get_tree().paused = false
-		_show_hud_alert("The wind blew your map away! Reach Ant Den 1!", 4.0)
+		if custom_hud_layer != null:
+			custom_hud_layer.visible = true
+		elif status_label != null:
+			status_label.visible = true
+		_refresh_hud()
+
+		if has_map_intro:
+			_show_hud_alert("The wind blew your map away! Reach Ant Den 1!", 4.0)
 
 	_start_item_spawn_loop()
 	_start_hazard_loop()
@@ -298,6 +324,136 @@ func _ready() -> void:
 	follower_timer.autostart = true
 	follower_timer.timeout.connect(_on_spawn_timer_timeout)
 	add_child(follower_timer)
+
+func _show_title_screen(audio: Node) -> CanvasLayer:
+	is_title_open = true
+
+	var title_layer := CanvasLayer.new()
+	title_layer.name = "TitleScreenLayer"
+	title_layer.layer = 40
+	title_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(title_layer)
+
+	var root := Control.new()
+	root.name = "TitleRoot"
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_STOP
+	title_layer.add_child(root)
+
+	var backdrop := ColorRect.new()
+	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
+	backdrop.color = Color(0.14, 0.10, 0.07, 1.0)
+	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(backdrop)
+
+	var center := CenterContainer.new()
+	center.name = "TitleContent"
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(center)
+
+	var main_vbox := VBoxContainer.new()
+	main_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	main_vbox.add_theme_constant_override("separation", 22)
+	main_vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	center.add_child(main_vbox)
+
+	var logo_rect := TextureRect.new()
+	logo_rect.texture = title_logo_texture
+	logo_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	logo_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	logo_rect.custom_minimum_size = Vector2(640, 290)
+	logo_rect.pivot_offset = Vector2(320, 145)
+	logo_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	main_vbox.add_child(logo_rect)
+
+	var logo_tw := title_layer.create_tween().set_loops()
+	logo_tw.tween_property(logo_rect, "scale", Vector2(1.035, 1.035), 1.4).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	logo_tw.tween_property(logo_rect, "scale", Vector2.ONE, 1.4).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+	var btn_vbox := VBoxContainer.new()
+	btn_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	btn_vbox.add_theme_constant_override("separation", 14)
+	main_vbox.add_child(btn_vbox)
+
+	var start_btn := Button.new()
+	start_btn.text = "START GAME"
+	start_btn.custom_minimum_size = Vector2(270, 64)
+	start_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_apply_custom_button_style(start_btn, 23)
+	btn_vbox.add_child(start_btn)
+
+	var controls_btn := Button.new()
+	controls_btn.text = "HOW TO PLAY"
+	controls_btn.custom_minimum_size = Vector2(270, 56)
+	controls_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_apply_custom_button_style(controls_btn, 19)
+	btn_vbox.add_child(controls_btn)
+
+	var quit_btn := Button.new()
+	quit_btn.text = "QUIT"
+	quit_btn.custom_minimum_size = Vector2(270, 56)
+	quit_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_apply_custom_button_style(quit_btn, 19)
+	btn_vbox.add_child(quit_btn)
+
+	var info_panel := PanelContainer.new()
+	info_panel.visible = false
+	info_panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var info_style := StyleBoxFlat.new()
+	info_style.bg_color = Color(0.86, 0.80, 0.71, 0.96)
+	info_style.border_color = Color(0.24, 0.16, 0.09, 1.0)
+	info_style.set_border_width_all(3)
+	info_style.set_corner_radius_all(12)
+	info_style.content_margin_left = 22
+	info_style.content_margin_right = 22
+	info_style.content_margin_top = 12
+	info_style.content_margin_bottom = 12
+	info_panel.add_theme_stylebox_override("panel", info_style)
+	main_vbox.add_child(info_panel)
+
+	var info_label := Label.new()
+	info_label.text = "Move: WASD / Arrow Keys   |   Pick Up Item: E\nHuddle Squad: SPACE   |   Pause: ESC\nRecruit stray ants, gather Food & Water quota, and dodge hazards!"
+	info_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	info_label.add_theme_font_size_override("font_size", 16)
+	info_label.add_theme_color_override("font_color", Color(0.16, 0.10, 0.06, 1.0))
+	info_panel.add_child(info_label)
+
+	controls_btn.pressed.connect(func() -> void:
+		if audio != null:
+			audio.play_button()
+		info_panel.visible = not info_panel.visible
+	)
+
+	quit_btn.pressed.connect(func() -> void:
+		if audio != null:
+			audio.play_button()
+		get_tree().quit()
+	)
+
+	start_btn.grab_focus()
+	await start_btn.pressed
+
+	if not is_inside_tree():
+		return title_layer
+
+	start_btn.disabled = true
+	controls_btn.disabled = true
+	quit_btn.disabled = true
+
+	if audio != null:
+		audio.play_button()
+
+	if logo_tw != null and logo_tw.is_valid():
+		logo_tw.kill()
+
+	var exit_tw := title_layer.create_tween().set_parallel(true)
+	exit_tw.tween_property(center, "modulate:a", 0.0, 0.25).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	exit_tw.tween_property(backdrop, "color", Color(0.04, 0.03, 0.03, 1.0), 0.28).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	await exit_tw.finished
+
+	is_title_open = false
+	return title_layer
 
 func _apply_custom_button_style(btn: Button, font_size: int = 20) -> void:
 	btn.add_theme_font_size_override("font_size", font_size)
@@ -398,16 +554,13 @@ func _setup_custom_hud() -> void:
 		ant_bar.texture = ui_antbar_texture
 		ant_bar.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		ant_bar.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		ant_bar.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-		ant_bar.offset_left = 20.0
-		ant_bar.offset_right = 260.0
-		ant_bar.offset_top = -140.0
-		ant_bar.offset_bottom = -16.0
+		ant_bar.custom_minimum_size = Vector2(240, 124)
+		ant_bar.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 		ant_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		root.add_child(ant_bar)
+		left_vbox.add_child(ant_bar)
 
 		ant_bar_label = Label.new()
-		ant_bar_label.anchor_left = 0.44
+		ant_bar_label.anchor_left = 0.48
 		ant_bar_label.anchor_right = 0.92
 		ant_bar_label.anchor_top = 0.36
 		ant_bar_label.anchor_bottom = 0.64
@@ -441,7 +594,7 @@ func _setup_custom_hud() -> void:
 
 	if ui_resources_texture != null:
 		var res_grid := GridContainer.new()
-		res_grid.columns = 1
+		res_grid.columns = 2
 		res_grid.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 		res_grid.add_theme_constant_override("h_separation", 8)
 		res_grid.add_theme_constant_override("v_separation", 4)
@@ -605,7 +758,7 @@ func _setup_pause_menu() -> void:
 	vbox.add_child(quit_btn)
 
 func _toggle_pause_menu() -> void:
-	if is_story_playing or is_intro_playing or is_game_over or game_finished:
+	if is_title_open or is_story_playing or is_intro_playing or is_game_over or game_finished:
 		return
 
 	var audio := AudioManager.get_instance(get_tree())
@@ -774,7 +927,7 @@ func _has_valid_story_slides() -> bool:
 			return true
 	return false
 
-func _play_story_cutscene(audio: Node) -> void:
+func _play_story_cutscene(audio: Node, title_layer: CanvasLayer = null) -> void:
 	is_story_playing = true
 	story_skip_all_requested = false
 
@@ -797,6 +950,8 @@ func _play_story_cutscene(audio: Node) -> void:
 		})
 
 	if beats.is_empty():
+		if title_layer != null and is_instance_valid(title_layer):
+			title_layer.queue_free()
 		is_story_playing = false
 		return
 
@@ -811,6 +966,16 @@ func _play_story_cutscene(audio: Node) -> void:
 	root.focus_mode = Control.FOCUS_ALL
 	root.mouse_filter = Control.MOUSE_FILTER_STOP
 	story_layer.add_child(root)
+
+	var bg := ColorRect.new()
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bg.color = Color(0.04, 0.03, 0.03, 1.0)
+	root.add_child(bg)
+
+	if title_layer != null and is_instance_valid(title_layer):
+		title_layer.queue_free()
+
 	root.grab_focus()
 
 	root.gui_input.connect(func(event: InputEvent) -> void:
@@ -835,12 +1000,6 @@ func _play_story_cutscene(audio: Node) -> void:
 				story_next_requested = true
 			root.accept_event()
 	)
-
-	var bg := ColorRect.new()
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bg.color = Color(0.04, 0.03, 0.03, 1.0)
-	root.add_child(bg)
 
 	var vp_size := get_viewport().get_visible_rect().size
 
@@ -1229,7 +1388,7 @@ func _try_load_scene(paths: Array[String]) -> PackedScene:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_ESCAPE and not is_story_playing and not is_intro_playing and not is_game_over and not game_finished:
+		if event.keycode == KEY_ESCAPE and not is_title_open and not is_story_playing and not is_intro_playing and not is_game_over and not game_finished:
 			_toggle_pause_menu()
 		elif (is_game_over or game_finished) and event.keycode == KEY_R:
 			_reload_game()
