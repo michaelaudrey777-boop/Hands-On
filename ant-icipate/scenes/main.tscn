@@ -7,6 +7,7 @@
 [ext_resource type="Texture2D" uid="uid://dsa5jx85n6vsl" path="res://assets/ui/map.png" id="3_bjg73"]
 [ext_resource type="Texture2D" uid="uid://bveytmaxgrfl" path="res://assets/cutscenes/1.png" id="3_dnhof"]
 [ext_resource type="Texture2D" uid="uid://br1irca0gl0p8" path="res://assets/ui/ui_antbar.png" id="3_e755i"]
+[ext_resource type="Texture2D" uid="uid://c2v3t3kdrtd7o" path="res://assets/ui/export_20.png" id="3_ro3en"]
 [ext_resource type="Texture2D" uid="uid://cuam2qbxkg5g5" path="res://assets/cutscenes/2.png" id="4_1v6qk"]
 [ext_resource type="Texture2D" uid="uid://iwdbbkys4v4y" path="res://assets/resources/resource_Bread.png" id="4_dp3eg"]
 [ext_resource type="PackedScene" uid="uid://dne3un4efkfjf" path="res://scenes/scavenge_item.tscn" id="4_jyhfs"]
@@ -241,6 +242,7 @@ size = Vector2(24400, 200)
 script = ExtResource("1_0wfyh")
 follower_scene = ExtResource("2_muem4")
 leader = NodePath("AntLeader")
+title_logo_texture = ExtResource("3_ro3en")
 ui_antbar_texture = ExtResource("3_e755i")
 ui_upgradebar_texture = ExtResource("4_ro3en")
 ui_resources_texture = ExtResource("5_od4ux")
