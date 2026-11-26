@@ -14,7 +14,7 @@
 [ext_resource type="Texture2D" uid="uid://c4hwmuvmxg45n" path="res://assets/ui/ui_upgradebar.png" id="4_ro3en"]
 [ext_resource type="Texture2D" uid="uid://b572ul1fkj2wp" path="res://assets/resources/resource_Water.png" id="5_0ld40"]
 [ext_resource type="Texture2D" uid="uid://nabf1ojsmcvl" path="res://assets/cutscenes/3.png" id="5_augu2"]
-[ext_resource type="PackedScene" uid="uid://bbfpdth4335gp" path="res://scenes/hazard_hand.tscn" id="5_choun"]
+[ext_resource type="PackedScene" uid="uid://dolbqhbdqfckk" path="res://scenes/hazard_hand.tscn" id="5_choun"]
 [ext_resource type="Texture2D" uid="uid://ci71hng6i2ijk" path="res://assets/ui/ui_resources.png" id="5_od4ux"]
 [ext_resource type="PackedScene" uid="uid://b7ktcttu0c236" path="res://scenes/ant_nest.tscn" id="5_tbgi4"]
 [ext_resource type="Texture2D" uid="uid://bnoogxgdhlvhk" path="res://assets/resources/resource_Fruit.png" id="6_gqmmt"]
@@ -27,7 +27,10 @@
 [ext_resource type="Texture2D" uid="uid://q0cltde4ss7l" path="res://assets/resources/resource_Meat1.png" id="8_jscy8"]
 [ext_resource type="Script" uid="uid://v5pbtmoomxu5" path="res://scripts/closing_fog.gd" id="8_tipki"]
 [ext_resource type="Texture2D" uid="uid://cpjtyiwwy1kix" path="res://assets/resources/resource_Meat2.png" id="9_pm3ni"]
+[ext_resource type="Texture2D" uid="uid://s1fpwrww5cy1" path="res://assets/ui/badge_antamount.png" id="9_xhfw6"]
+[ext_resource type="Texture2D" uid="uid://c7gpn8cva8nvp" path="res://assets/ui/badge_carry.png" id="10_1epgm"]
 [ext_resource type="Texture2D" uid="uid://n7lfykogwfuo" path="res://assets/hazards/foot_green.png" id="10_eb6dy"]
+[ext_resource type="Texture2D" uid="uid://c54gsfxhdvglj" path="res://assets/ui/badge_speed.png" id="11_152kg"]
 [ext_resource type="Texture2D" uid="uid://cxkw7ol5mngb" path="res://assets/hazards/foot_blue (1).png" id="11_jbj1t"]
 [ext_resource type="Texture2D" uid="uid://j8hg6uwe5yl3" path="res://assets/hazards/foot_coolerred.png" id="12_muem4"]
 [ext_resource type="Texture2D" uid="uid://dq8m0o1qof7ni" path="res://assets/background/ground/ground tile variation 1 (harsh).png" id="14_yc10j"]
@@ -238,7 +241,7 @@ size = Vector2(24400, 200)
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_5t25c"]
 size = Vector2(24400, 200)
 
-[node name="Main" type="Node2D" unique_id=1787259563 node_paths=PackedStringArray("leader", "ant_dens", "round_start_markers", "forward_borders")]
+[node name="Main" type="Node2D" unique_id=1787259563 node_paths=PackedStringArray("leader")]
 script = ExtResource("1_0wfyh")
 follower_scene = ExtResource("2_muem4")
 leader = NodePath("AntLeader")
@@ -249,14 +252,14 @@ ui_resources_texture = ExtResource("5_od4ux")
 ui_warningboard_texture = ExtResource("6_xhfw6")
 ui_menubg_texture = ExtResource("7_1epgm")
 ui_button_texture = ExtResource("8_152kg")
+badge_squad_texture = ExtResource("9_xhfw6")
+badge_capacity_texture = ExtResource("10_1epgm")
+badge_speed_texture = ExtResource("11_152kg")
 story_slides = Array[Texture2D]([ExtResource("3_dnhof"), ExtResource("4_1v6qk"), ExtResource("5_augu2"), ExtResource("6_tm6hj"), ExtResource("7_kf5aa")])
 intro_map_texture = ExtResource("3_bjg73")
 intro_memorize_duration = 10.0
-ant_dens = [NodePath("AntDen1"), NodePath("AntDen2"), NodePath("AntDen3")]
-round_start_markers = [null, NodePath("Spawn_Round2"), NodePath("Spawn_Round3")]
 round_spawn_mins = Array[Vector2]([Vector2(350, -7650), Vector2(8350, -7650), Vector2(16350, -7650)])
 round_spawn_maxs = Array[Vector2]([Vector2(7650, 650), Vector2(15650, 650), Vector2(23650, 650)])
-forward_borders = [NodePath("RoundBorders/Border_R1_to_R2"), NodePath("RoundBorders/Border_R2_to_R3")]
 item_scene = ExtResource("4_jyhfs")
 tex_bread_crumb = ExtResource("4_dp3eg")
 tex_water_droplet = ExtResource("5_0ld40")

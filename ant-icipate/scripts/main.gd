@@ -16,11 +16,20 @@ extends Node2D
 @export var ui_warningboard_texture: Texture2D
 @export var ui_menubg_texture: Texture2D
 @export var ui_button_texture: Texture2D
+@export var badge_squad_texture: Texture2D
+@export var badge_capacity_texture: Texture2D
+@export var badge_speed_texture: Texture2D
 
 @export_group("Opening Story Cutscene")
 @export var story_slides: Array[Texture2D] = []
-@export var text_reveal_speed: float = 36.0
-@export var auto_advance_dialogue: bool = true
+@export_multiline var story_captions: Array[String] = [
+	"",
+	"",
+	"",
+	"",
+	""
+]
+@export var slide_duration: float = 3.5
 @export var allow_skip_story: bool = true
 
 @export_group("Intro Map Cutscene")
@@ -83,53 +92,6 @@ extends Node2D
 @export var initial_hand_delay: float = 12.0
 @export var round_hand_intervals: Array[float] = [16.0, 12.0, 8.5]
 @export var hand_interval_fallback: float = 9.0
-
-const STORY_SCRIPT: Array[Dictionary] = [
-	{
-		"motion": "colony_pan",
-		"fade_in": 0.55,
-		"hold_duration": 2.0,
-		"lines": [
-			"\"In the world of ants, everyone has a role, purpose, and everyone is expected to work together.\"",
-			"\"After all, that's how a colony is supposed to function\"",
-			"\"One day, there came a message from the queen.\""
-		]
-	},
-	{
-		"motion": "queen_fade",
-		"fade_in": 0.85,
-		"hold_duration": 2.0,
-		"lines": [
-			"\"It has been decided!\"",
-			"\"My fellow ants, for this important mission, a leader must be chosen!\"",
-			"\"The leader of the ants will be someone who has proven his place amongst the soldiers, who has immense experience, who is already resembling a leader!\""
-		]
-	},
-	{
-		"motion": "dramatic_zoom",
-		"fade_in": 0.12,
-		"hold_duration": 2.2,
-		"lines": [
-			"\"And that someone was me…\""
-		]
-	},
-	{
-		"motion": "hold_resolve",
-		"fade_in": 0.45,
-		"hold_duration": 2.0,
-		"lines": [
-			"\"Yes, I have been chosen to be the leader of this mission\"",
-			"\"The objective was simple: scout the path, gather supplies, avoid danger, and deliver everything safely.\"",
-			"\"Simple enough. Or so I thought.\""
-		]
-	},
-	{
-		"motion": "dramatic_departure",
-		"fade_in": 0.55,
-		"hold_duration": 3.4,
-		"lines": []
-	}
-]
 
 const ITEM_CATALOG: Array[Dictionary] = [
 	{
@@ -198,8 +160,6 @@ var is_story_playing: bool = false
 var is_intro_playing: bool = false
 var is_pause_open: bool = false
 var intro_skip_requested: bool = false
-var is_typing_line: bool = false
-var skip_typing_requested: bool = false
 var story_next_requested: bool = false
 var story_skip_all_requested: bool = false
 
@@ -220,7 +180,14 @@ var custom_hud_layer: CanvasLayer = null
 var summary_strip_label: Label = null
 var ant_bar_label: Label = null
 var upgrade_bar_label: Label = null
+var upgrade_badge_icon: TextureRect = null
 var resource_count_labels: Dictionary = {}
+
+var badge_popup_holder: Control = null
+var badge_popup_icon: TextureRect = null
+var badge_popup_title: Label = null
+var badge_popup_desc: Label = null
+var badge_popup_tween: Tween = null
 
 var warning_board_rect: TextureRect = null
 var warning_board_label: Label = null
@@ -580,15 +547,26 @@ func _setup_custom_hud() -> void:
 		upg_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		left_vbox.add_child(upg_bar)
 
+		upgrade_badge_icon = TextureRect.new()
+		upgrade_badge_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		upgrade_badge_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		upgrade_badge_icon.anchor_left = 0.115
+		upgrade_badge_icon.anchor_right = 0.305
+		upgrade_badge_icon.anchor_top = 0.29
+		upgrade_badge_icon.anchor_bottom = 0.75
+		upgrade_badge_icon.visible = false
+		upgrade_badge_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		upg_bar.add_child(upgrade_badge_icon)
+
 		upgrade_bar_label = Label.new()
-		upgrade_bar_label.anchor_left = 0.28
-		upgrade_bar_label.anchor_right = 0.88
-		upgrade_bar_label.anchor_top = 0.35
-		upgrade_bar_label.anchor_bottom = 0.65
+		upgrade_bar_label.anchor_left = 0.33
+		upgrade_bar_label.anchor_right = 0.86
+		upgrade_bar_label.anchor_top = 0.36
+		upgrade_bar_label.anchor_bottom = 0.64
 		upgrade_bar_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		upgrade_bar_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		upgrade_bar_label.clip_text = true
-		upgrade_bar_label.add_theme_font_size_override("font_size", 15)
+		upgrade_bar_label.add_theme_font_size_override("font_size", 13)
 		upgrade_bar_label.add_theme_color_override("font_color", Color(0.16, 0.10, 0.06, 1.0))
 		upg_bar.add_child(upgrade_bar_label)
 
@@ -596,19 +574,18 @@ func _setup_custom_hud() -> void:
 		var res_grid := GridContainer.new()
 		res_grid.columns = 2
 		res_grid.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-		res_grid.add_theme_constant_override("h_separation", 8)
-		res_grid.add_theme_constant_override("v_separation", 4)
+		res_grid.add_theme_constant_override("v_separation", 2)
 		res_grid.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		left_vbox.add_child(res_grid)
 
 		var tex_size := ui_resources_texture.get_size()
 
 		var res_layout: Array[Dictionary] = [
-			{"name": "Bread Crumb",   "rx": 0.020, "ry": 0.18, "rw": 0.330, "rh": 0.32, "lt": 0.35, "lb": 0.77},
-			{"name": "Water Droplet", "rx": 0.365, "ry": 0.18, "rw": 0.330, "rh": 0.32, "lt": 0.35, "lb": 0.77},
-			{"name": "Fruit Piece",   "rx": 0.365, "ry": 0.53, "rw": 0.330, "rh": 0.32, "lt": 0.26, "lb": 0.68},
-			{"name": "Sugar Cube",    "rx": 0.020, "ry": 0.53, "rw": 0.330, "rh": 0.32, "lt": 0.26, "lb": 0.68},
-			{"name": "Meat",          "rx": 0.692, "ry": 0.18, "rw": 0.305, "rh": 0.32, "lt": 0.35, "lb": 0.77}
+			{"name": "Bread Crumb",   "rx": 0.020, "ry": 0.18, "rw": 0.330, "rh": 0.32, "lt": 0.25, "lb": 0.65},
+			{"name": "Water Droplet", "rx": 0.365, "ry": 0.18, "rw": 0.330, "rh": 0.32, "lt": 0.25, "lb": 0.65},
+			{"name": "Fruit Piece",   "rx": 0.365, "ry": 0.53, "rw": 0.330, "rh": 0.32, "lt": 0.16, "lb": 0.56},
+			{"name": "Sugar Cube",    "rx": 0.020, "ry": 0.53, "rw": 0.330, "rh": 0.32, "lt": 0.16, "lb": 0.56},
+			{"name": "Meat",          "rx": 0.692, "ry": 0.18, "rw": 0.305, "rh": 0.32, "lt": 0.25, "lb": 0.65}
 		]
 
 		for entry in res_layout:
@@ -625,7 +602,7 @@ func _setup_custom_hud() -> void:
 			res_rect.texture = atlas
 			res_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 			res_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-			res_rect.custom_minimum_size = Vector2(146, 54)
+			res_rect.custom_minimum_size = Vector2(132, 46)
 			res_rect.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 			res_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			res_grid.add_child(res_rect)
@@ -638,7 +615,7 @@ func _setup_custom_hud() -> void:
 			count_lbl.anchor_bottom = entry["lb"]
 			count_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			count_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			count_lbl.add_theme_font_size_override("font_size", 17)
+			count_lbl.add_theme_font_size_override("font_size", 16)
 			count_lbl.add_theme_color_override("font_color", Color(0.16, 0.10, 0.06, 1.0))
 			res_rect.add_child(count_lbl)
 
@@ -682,6 +659,85 @@ func _setup_custom_hud() -> void:
 		warning_board_label.add_theme_font_size_override("font_size", 16)
 		warning_board_label.add_theme_color_override("font_color", Color(0.18, 0.10, 0.05, 1.0))
 		warning_board_rect.add_child(warning_board_label)
+
+	badge_popup_holder = Control.new()
+	badge_popup_holder.set_anchors_preset(Control.PRESET_CENTER)
+	badge_popup_holder.offset_left = -190.0
+	badge_popup_holder.offset_right = 190.0
+	badge_popup_holder.offset_top = -140.0
+	badge_popup_holder.offset_bottom = 140.0
+	badge_popup_holder.pivot_offset = Vector2(190.0, 140.0)
+	badge_popup_holder.visible = false
+	badge_popup_holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(badge_popup_holder)
+
+	var badge_vbox := VBoxContainer.new()
+	badge_vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
+	badge_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	badge_vbox.add_theme_constant_override("separation", 8)
+	badge_vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	badge_popup_holder.add_child(badge_vbox)
+
+	badge_popup_icon = TextureRect.new()
+	badge_popup_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	badge_popup_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	badge_popup_icon.custom_minimum_size = Vector2(150, 150)
+	badge_popup_icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	badge_popup_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	badge_vbox.add_child(badge_popup_icon)
+
+	badge_popup_title = Label.new()
+	badge_popup_title.text = "UPGRADE UNLOCKED!"
+	badge_popup_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	badge_popup_title.add_theme_font_size_override("font_size", 24)
+	badge_popup_title.add_theme_color_override("font_color", Color(1.0, 0.92, 0.55, 1.0))
+	badge_popup_title.add_theme_constant_override("outline_size", 5)
+	badge_popup_title.add_theme_color_override("font_outline_color", Color(0.12, 0.07, 0.03, 0.95))
+	badge_vbox.add_child(badge_popup_title)
+
+	badge_popup_desc = Label.new()
+	badge_popup_desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	badge_popup_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	badge_popup_desc.add_theme_font_size_override("font_size", 18)
+	badge_popup_desc.add_theme_color_override("font_color", Color(0.99, 0.96, 0.90, 1.0))
+	badge_popup_desc.add_theme_constant_override("outline_size", 4)
+	badge_popup_desc.add_theme_color_override("font_outline_color", Color(0.12, 0.07, 0.03, 0.95))
+	badge_vbox.add_child(badge_popup_desc)
+
+func _get_badge_texture_for_upgrade(upgrade_msg: String) -> Texture2D:
+	if "Followers" in upgrade_msg:
+		return badge_squad_texture
+	elif "Capacity" in upgrade_msg:
+		return badge_capacity_texture
+	elif "Speed" in upgrade_msg:
+		return badge_speed_texture
+	return null
+
+func _show_upgrade_badge_popup(badge_tex: Texture2D, upgrade_msg: String) -> void:
+	if badge_popup_holder == null or badge_tex == null:
+		return
+
+	badge_popup_icon.texture = badge_tex
+	badge_popup_desc.text = upgrade_msg
+	badge_popup_holder.visible = true
+	badge_popup_holder.modulate.a = 0.0
+	badge_popup_holder.scale = Vector2(0.35, 0.35)
+
+	if badge_popup_tween != null and badge_popup_tween.is_valid():
+		badge_popup_tween.kill()
+
+	badge_popup_tween = create_tween()
+	badge_popup_tween.set_parallel(true)
+	badge_popup_tween.tween_property(badge_popup_holder, "modulate:a", 1.0, 0.25)
+	badge_popup_tween.tween_property(badge_popup_holder, "scale", Vector2.ONE, 0.45).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+	badge_popup_tween.chain().tween_interval(3.0)
+	badge_popup_tween.chain().set_parallel(true)
+	badge_popup_tween.tween_property(badge_popup_holder, "modulate:a", 0.0, 0.35)
+	badge_popup_tween.tween_property(badge_popup_holder, "scale", Vector2(0.85, 0.85), 0.35)
+	badge_popup_tween.chain().tween_callback(func() -> void:
+		if is_instance_valid(badge_popup_holder):
+			badge_popup_holder.visible = false
+	)
 
 func _setup_pause_menu() -> void:
 	pause_layer = CanvasLayer.new()
@@ -931,25 +987,16 @@ func _play_story_cutscene(audio: Node, title_layer: CanvasLayer = null) -> void:
 	is_story_playing = true
 	story_skip_all_requested = false
 
-	var beats: Array[Dictionary] = []
+	var slides: Array[Dictionary] = []
 	for i in range(story_slides.size()):
-		if story_slides[i] == null:
-			continue
-		var script_entry: Dictionary = STORY_SCRIPT[i] if i < STORY_SCRIPT.size() else {
-			"motion": "colony_pan",
-			"fade_in": 0.4,
-			"hold_duration": 2.5,
-			"lines": []
-		}
-		beats.append({
-			"texture": story_slides[i],
-			"motion": script_entry.get("motion", "colony_pan"),
-			"fade_in": script_entry.get("fade_in", 0.4),
-			"hold_duration": script_entry.get("hold_duration", 2.5),
-			"lines": script_entry.get("lines", [])
-		})
+		if story_slides[i] != null:
+			var caption := story_captions[i] if i < story_captions.size() else ""
+			slides.append({
+				"texture": story_slides[i],
+				"caption": caption
+			})
 
-	if beats.is_empty():
+	if slides.is_empty():
 		if title_layer != null and is_instance_valid(title_layer):
 			title_layer.queue_free()
 		is_story_playing = false
@@ -983,21 +1030,14 @@ func _play_story_cutscene(audio: Node, title_layer: CanvasLayer = null) -> void:
 			return
 		if event is InputEventKey and event.pressed and not event.echo:
 			if event.keycode in [KEY_SPACE, KEY_ENTER, KEY_KP_ENTER, KEY_RIGHT]:
-				if is_typing_line:
-					skip_typing_requested = true
-				else:
-					story_next_requested = true
+				story_next_requested = true
 				root.accept_event()
 			elif event.keycode == KEY_ESCAPE:
 				story_skip_all_requested = true
-				skip_typing_requested = true
 				story_next_requested = true
 				root.accept_event()
 		elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-			if is_typing_line:
-				skip_typing_requested = true
-			else:
-				story_next_requested = true
+			story_next_requested = true
 			root.accept_event()
 	)
 
@@ -1013,202 +1053,98 @@ func _play_story_cutscene(audio: Node, title_layer: CanvasLayer = null) -> void:
 	slide_rect.modulate.a = 0.0
 	root.add_child(slide_rect)
 
-	var dialogue_panel := PanelContainer.new()
-	dialogue_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	dialogue_panel.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	dialogue_panel.offset_left = 110.0
-	dialogue_panel.offset_right = -110.0
-	dialogue_panel.offset_top = -164.0
-	dialogue_panel.offset_bottom = -50.0
-	dialogue_panel.visible = false
+	var caption_panel := PanelContainer.new()
+	caption_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	caption_panel.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	caption_panel.offset_left = 120.0
+	caption_panel.offset_right = -120.0
+	caption_panel.offset_top = -132.0
+	caption_panel.offset_bottom = -44.0
 
 	var cap_style := StyleBoxFlat.new()
-	cap_style.bg_color = Color(0.08, 0.06, 0.04, 0.88)
-	cap_style.border_color = Color(0.82, 0.70, 0.46, 0.80)
-	cap_style.set_border_width_all(3)
-	cap_style.set_corner_radius_all(12)
-	cap_style.content_margin_left = 28
-	cap_style.content_margin_right = 28
-	cap_style.content_margin_top = 14
-	cap_style.content_margin_bottom = 14
-	dialogue_panel.add_theme_stylebox_override("panel", cap_style)
-	root.add_child(dialogue_panel)
+	cap_style.bg_color = Color(0.06, 0.05, 0.04, 0.82)
+	cap_style.border_color = Color(0.75, 0.65, 0.45, 0.55)
+	cap_style.set_border_width_all(2)
+	cap_style.set_corner_radius_all(10)
+	cap_style.content_margin_left = 24
+	cap_style.content_margin_right = 24
+	cap_style.content_margin_top = 12
+	cap_style.content_margin_bottom = 12
+	caption_panel.add_theme_stylebox_override("panel", cap_style)
+	root.add_child(caption_panel)
 
-	var dialogue_label := Label.new()
-	dialogue_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	dialogue_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	dialogue_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	dialogue_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	dialogue_label.add_theme_font_size_override("font_size", 22)
-	dialogue_label.add_theme_color_override("font_color", Color(0.99, 0.95, 0.88, 1.0))
-	dialogue_panel.add_child(dialogue_label)
-
-	var hint_panel := PanelContainer.new()
-	hint_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	hint_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	hint_panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	hint_panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	hint_panel.offset_right = -22.0
-	hint_panel.offset_bottom = -10.0
-
-	var hint_style := StyleBoxFlat.new()
-	hint_style.bg_color = Color(0.05, 0.04, 0.03, 0.90)
-	hint_style.border_color = Color(0.82, 0.70, 0.46, 0.75)
-	hint_style.set_border_width_all(2)
-	hint_style.set_corner_radius_all(8)
-	hint_style.content_margin_left = 14
-	hint_style.content_margin_right = 14
-	hint_style.content_margin_top = 4
-	hint_style.content_margin_bottom = 4
-	hint_panel.add_theme_stylebox_override("panel", hint_style)
-	root.add_child(hint_panel)
+	var caption_label := Label.new()
+	caption_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	caption_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	caption_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	caption_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	caption_label.add_theme_font_size_override("font_size", 22)
+	caption_label.add_theme_color_override("font_color", Color(0.98, 0.94, 0.86, 1.0))
+	caption_panel.add_child(caption_label)
 
 	var hint_label := Label.new()
 	hint_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	hint_label.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	hint_label.offset_right = -28.0
+	hint_label.offset_top = -34.0
+	hint_label.offset_bottom = -10.0
 	hint_label.add_theme_font_size_override("font_size", 15)
-	hint_label.add_theme_color_override("font_color", Color(1.0, 0.96, 0.86, 1.0))
-	hint_label.add_theme_constant_override("outline_size", 4)
-	hint_label.add_theme_color_override("font_outline_color", Color(0.04, 0.03, 0.02, 1.0))
-	hint_panel.add_child(hint_label)
+	hint_label.add_theme_color_override("font_color", Color(0.85, 0.80, 0.72, 0.78))
+	root.add_child(hint_label)
 
-	for idx in range(beats.size()):
+	for idx in range(slides.size()):
 		if story_skip_all_requested or not is_inside_tree():
 			break
 
-		var beat: Dictionary = beats[idx]
-		var motion: String = beat["motion"]
-		var fade_in_dur: float = beat["fade_in"]
-		var lines: Array = beat["lines"]
-
-		slide_rect.texture = beat["texture"]
-		slide_rect.position = Vector2.ZERO
+		story_next_requested = false
+		var entry := slides[idx]
+		slide_rect.texture = entry["texture"]
+		slide_rect.scale = Vector2.ONE
 		slide_rect.modulate.a = 0.0
 
-		var start_scale := Vector2.ONE
-		var end_scale := Vector2(1.045, 1.045)
-		match motion:
-			"dramatic_zoom":
-				start_scale = Vector2(1.0, 1.0)
-				end_scale = Vector2(1.22, 1.22)
-			"hold_resolve":
-				start_scale = Vector2(1.08, 1.08)
-				end_scale = Vector2(1.0, 1.0)
-			"dramatic_departure":
-				start_scale = Vector2(1.06, 1.06)
-				end_scale = Vector2(1.0, 1.0)
-
-		slide_rect.scale = start_scale
-		dialogue_panel.visible = false
-		dialogue_label.text = ""
+		var cap_text: String = entry["caption"]
+		caption_panel.visible = cap_text.strip_edges() != ""
+		caption_label.text = cap_text
+		caption_panel.modulate.a = 0.0
 
 		if allow_skip_story:
-			hint_label.text = "Scene %d / %d  |  [CLICK / SPACE] Continue   |   [ESC] Skip Intro" % [idx + 1, beats.size()]
+			hint_label.text = "(%d / %d)  [CLICK / SPACE] Next   |   [ESC] Skip" % [idx + 1, slides.size()]
 		else:
-			hint_label.text = "Scene %d / %d" % [idx + 1, beats.size()]
+			hint_label.text = "%d / %d" % [idx + 1, slides.size()]
 
-		var fade_in := story_layer.create_tween()
-		fade_in.tween_property(slide_rect, "modulate:a", 1.0, fade_in_dur).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		var fade_in := story_layer.create_tween().set_parallel(true)
+		fade_in.tween_property(slide_rect, "modulate:a", 1.0, 0.4).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		if caption_panel.visible:
+			fade_in.tween_property(caption_panel, "modulate:a", 1.0, 0.4)
 		await fade_in.finished
 
-		if story_skip_all_requested or not is_inside_tree():
-			break
-
-		var scene_elapsed := 0.0
-		var est_total_dur := maxf(2.5, float(lines.size()) * 3.2) if not lines.is_empty() else float(beat["hold_duration"])
-
-		if lines.is_empty():
-			story_next_requested = false
-			var hold_dur: float = beat["hold_duration"]
-			while scene_elapsed < hold_dur and not story_next_requested and not story_skip_all_requested and is_inside_tree():
-				var dt := get_process_delta_time()
-				scene_elapsed += dt
-				if not root.has_focus():
-					root.grab_focus()
-				var t := clampf(scene_elapsed / hold_dur, 0.0, 1.0)
-				slide_rect.scale = start_scale.lerp(end_scale, t)
-				await get_tree().process_frame
-		else:
-			dialogue_panel.visible = true
-			dialogue_panel.modulate.a = 0.0
-			var box_in := story_layer.create_tween()
-			box_in.tween_property(dialogue_panel, "modulate:a", 1.0, 0.22)
-			await box_in.finished
-
-			for line_idx in range(lines.size()):
-				if story_skip_all_requested or not is_inside_tree():
-					break
-
-				var full_line: String = str(lines[line_idx])
-				is_typing_line = true
-				skip_typing_requested = false
-				story_next_requested = false
-				dialogue_label.text = ""
-
-				var char_progress := 0.0
-				var speed := maxf(15.0, text_reveal_speed)
-				while is_typing_line and not skip_typing_requested and not story_skip_all_requested and is_inside_tree():
-					var dt := get_process_delta_time()
-					scene_elapsed += dt
-					char_progress += dt * speed
-					if not root.has_focus():
-						root.grab_focus()
-
-					var cam_t := clampf(scene_elapsed / est_total_dur, 0.0, 1.0)
-					slide_rect.scale = start_scale.lerp(end_scale, cam_t)
-
-					if motion == "dramatic_zoom" and scene_elapsed < 0.45:
-						var shake_amp := (1.0 - (scene_elapsed / 0.45)) * 7.0
-						slide_rect.position = Vector2(randf_range(-shake_amp, shake_amp), randf_range(-shake_amp, shake_amp))
-					else:
-						slide_rect.position = Vector2.ZERO
-
-					var visible_chars := mini(int(char_progress), full_line.length())
-					dialogue_label.text = full_line.substr(0, visible_chars)
-					if visible_chars >= full_line.length():
-						is_typing_line = false
-
-					await get_tree().process_frame
-
-				is_typing_line = false
-				dialogue_label.text = full_line
-				slide_rect.position = Vector2.ZERO
-
-				if story_skip_all_requested or not is_inside_tree():
-					break
-
-				var read_wait := clampf(1.8 + float(full_line.length()) * 0.032, 2.2, 4.8)
-				var wait_elapsed := 0.0
-				while not story_next_requested and not story_skip_all_requested and is_inside_tree():
-					var dt := get_process_delta_time()
-					scene_elapsed += dt
-					wait_elapsed += dt
-					if not root.has_focus():
-						root.grab_focus()
-
-					var cam_t := clampf(scene_elapsed / est_total_dur, 0.0, 1.0)
-					slide_rect.scale = start_scale.lerp(end_scale, cam_t)
-
-					if auto_advance_dialogue and wait_elapsed >= read_wait:
-						break
-
-					await get_tree().process_frame
-
-				if story_next_requested and not story_skip_all_requested and audio != null:
-					audio.play_button()
+		var elapsed := 0.0
+		var dur := maxf(0.8, slide_duration)
+		while elapsed < dur and not story_next_requested and not story_skip_all_requested and is_inside_tree():
+			var dt := get_process_delta_time()
+			elapsed += dt
+			if not root.has_focus():
+				root.grab_focus()
+			var zoom := lerpf(1.0, 1.045, clampf(elapsed / dur, 0.0, 1.0))
+			slide_rect.scale = Vector2(zoom, zoom)
+			await get_tree().process_frame
 
 		if not is_inside_tree():
 			return
 
+		if story_next_requested and not story_skip_all_requested and audio != null:
+			audio.play_button()
+
 		var fade_out := story_layer.create_tween().set_parallel(true)
-		fade_out.tween_property(slide_rect, "modulate:a", 0.0, 0.35).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-		if dialogue_panel.visible:
-			fade_out.tween_property(dialogue_panel, "modulate:a", 0.0, 0.25)
+		fade_out.tween_property(slide_rect, "modulate:a", 0.0, 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		if caption_panel.visible:
+			fade_out.tween_property(caption_panel, "modulate:a", 0.0, 0.25)
 		await fade_out.finished
 
 	if is_instance_valid(story_layer):
 		var end_tw := story_layer.create_tween()
-		end_tw.tween_property(bg, "color:a", 0.0, 0.4)
+		end_tw.tween_property(bg, "color:a", 0.0, 0.35)
 		await end_tw.finished
 		if is_instance_valid(story_layer):
 			story_layer.queue_free()
@@ -1542,7 +1478,19 @@ func _on_den_reached(den: Area2D, leader_body: Node2D) -> void:
 		if leader_body.has_method("apply_random_upgrade"):
 			upgrade_msg = leader_body.apply_random_upgrade()
 		if upgrade_msg != "":
-			current_upgrade_text = upgrade_msg
+			if "Followers" in upgrade_msg:
+				current_upgrade_text = "+2 Max Ants"
+			elif "Capacity" in upgrade_msg:
+				current_upgrade_text = "+2 Capacity/Ant"
+			elif "Speed" in upgrade_msg:
+				current_upgrade_text = "+Move Speed"
+			else:
+				current_upgrade_text = upgrade_msg
+			var badge_tex := _get_badge_texture_for_upgrade(upgrade_msg)
+			if upgrade_badge_icon != null and badge_tex != null:
+				upgrade_badge_icon.texture = badge_tex
+				upgrade_badge_icon.visible = true
+			_show_upgrade_badge_popup(badge_tex, upgrade_msg)
 
 		_setup_round(current_round + 1)
 		_show_hud_alert("ROUND %d COMPLETE! (+%d Points)\nUpgrade: %s" % [current_round - 1, earned_points, upgrade_msg], 5.0)

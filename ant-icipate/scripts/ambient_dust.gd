@@ -25,7 +25,7 @@ func _build() -> void:
 	host.add_child(_make_emitter(
 		"AmbientDust", dust_amount,
 		Color(1, 1, 1, 1.0),
-		0.5, 1.0,
+		0.75, 1.3,
 		6.0, 16.0, 30.0, 4.0))
 
 	# bigger yellow pollen, drifts a bit faster and swirls more
