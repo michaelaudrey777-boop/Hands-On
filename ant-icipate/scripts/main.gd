@@ -37,6 +37,8 @@ extends Node2D
 @export var grid_columns: int = 6
 @export var grid_rows: int = 6
 @export var min_distance_from_leader: float = 450.0
+@export var follower_obstacle_clearance: float = 110.0
+@export var item_obstacle_clearance: float = 125.0
 
 @onready var status_label: Label = get_node_or_null("HUD/StatusLabel")
 @onready var closing_fog: Node2D = get_node_or_null("ClosingFog")
@@ -686,7 +688,7 @@ func _get_follower_spawn_position() -> Vector2:
 			randf_range(cell_min.y, cell_max.y)
 		)
 
-		if not _is_blocked_by_obstacle(candidate_pos, 65.0) and (leader == null or candidate_pos.distance_to(leader.global_position) >= min_distance_from_leader):
+		if not _is_blocked_by_obstacle(candidate_pos, 110.0) and (leader == null or candidate_pos.distance_to(leader.global_position) >= min_distance_from_leader):
 			return candidate_pos
 
 	for i in range(25):
@@ -694,7 +696,7 @@ func _get_follower_spawn_position() -> Vector2:
 			randf_range(eff_min.x, eff_max.x),
 			randf_range(eff_min.y, eff_max.y)
 		)
-		if not _is_blocked_by_obstacle(random_pos, 65.0) and (leader == null or random_pos.distance_to(leader.global_position) >= min_distance_from_leader):
+		if not _is_blocked_by_obstacle(random_pos, 110.0) and (leader == null or random_pos.distance_to(leader.global_position) >= min_distance_from_leader):
 			return random_pos
 
 	return Vector2.INF
@@ -739,7 +741,7 @@ func _get_spaced_item_position() -> Vector2:
 	return Vector2.INF
 
 func _is_valid_item_position(pos: Vector2) -> bool:
-	if _is_blocked_by_obstacle(pos, 75.0):
+	if _is_blocked_by_obstacle(pos, 125.0):
 		return false
 
 	if closing_fog != null and closing_fog.has_method("is_in_fog") and closing_fog.is_in_fog(pos, 250.0):
