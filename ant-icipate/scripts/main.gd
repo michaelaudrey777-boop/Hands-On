@@ -5,6 +5,26 @@ extends Node2D
 @export var initial_spawn_delay: float = 8.0
 @export var spawn_interval: float = 9.0
 
+@export_group("Custom UI Sprites")
+@export var ui_antbar_texture: Texture2D
+@export var ui_upgradebar_texture: Texture2D
+@export var ui_resources_texture: Texture2D
+@export var ui_warningboard_texture: Texture2D
+@export var ui_menubg_texture: Texture2D
+@export var ui_button_texture: Texture2D
+
+@export_group("Opening Story Cutscene")
+@export var story_slides: Array[Texture2D] = []
+@export_multiline var story_captions: Array[String] = [
+	"",
+	"",
+	"",
+	"",
+	""
+]
+@export var slide_duration: float = 3.5
+@export var allow_skip_story: bool = true
+
 @export_group("Intro Map Cutscene")
 @export var intro_map_texture: Texture2D
 @export var intro_memorize_duration: float = 6.0
@@ -128,8 +148,12 @@ var food_quota: int = 32
 var water_quota: int = 21
 var game_finished: bool = false
 var is_game_over: bool = false
+var is_story_playing: bool = false
 var is_intro_playing: bool = false
+var is_pause_open: bool = false
 var intro_skip_requested: bool = false
+var story_next_requested: bool = false
+var story_skip_all_requested: bool = false
 
 var ui_followers: int = 3
 var ui_max_followers: int = 5
@@ -138,10 +162,24 @@ var ui_max_capacity: int = 32
 var ui_food: int = 0
 var ui_water: int = 0
 var ui_overweight: bool = false
+var current_upgrade_text: String = "No Upgrade"
 var hud_alert_message: String = ""
 
 var available_follower_cells: Array[Vector2i] = []
 var available_item_cells: Array[Vector2i] = []
+
+var custom_hud_layer: CanvasLayer = null
+var summary_strip_label: Label = null
+var ant_bar_label: Label = null
+var upgrade_bar_label: Label = null
+var resource_count_labels: Dictionary = {}
+
+var warning_board_rect: TextureRect = null
+var warning_board_label: Label = null
+var warning_tween: Tween = null
+
+var pause_layer: CanvasLayer = null
+var pause_root: Control = null
 
 var reload_layer: CanvasLayer = null
 var reload_root: Control = null
@@ -152,6 +190,8 @@ var reload_button: Button = null
 
 func _ready() -> void:
 	_auto_recover_missing_references()
+	_setup_custom_hud()
+	_setup_pause_menu()
 	_setup_reload_screen()
 
 	if leader != null:
@@ -173,10 +213,32 @@ func _ready() -> void:
 
 	_setup_round(1)
 
-	if intro_map_texture != null and intro_memorize_duration > 0.0:
-		await _play_intro_map_sequence()
-		if not is_inside_tree():
-			return
+	var has_story := _has_valid_story_slides()
+	var has_map_intro := (intro_map_texture != null and intro_memorize_duration > 0.0)
+
+	if has_story or has_map_intro:
+		get_tree().paused = true
+		var audio := AudioManager.get_instance(get_tree())
+		var prev_audio_mode := Node.PROCESS_MODE_INHERIT
+		if audio != null:
+			prev_audio_mode = audio.process_mode
+			audio.process_mode = Node.PROCESS_MODE_ALWAYS
+
+		if has_story:
+			await _play_story_cutscene(audio)
+			if not is_inside_tree():
+				return
+
+		if has_map_intro:
+			await _play_intro_map_sequence(audio)
+			if not is_inside_tree():
+				return
+
+		if audio != null and is_instance_valid(audio):
+			audio.process_mode = prev_audio_mode
+
+		get_tree().paused = false
+		_show_hud_alert("The wind blew your map away! Reach Ant Den 1!", 4.0)
 
 	_start_item_spawn_loop()
 	_start_hazard_loop()
@@ -194,16 +256,323 @@ func _ready() -> void:
 	follower_timer.timeout.connect(_on_spawn_timer_timeout)
 	add_child(follower_timer)
 
-func _play_intro_map_sequence() -> void:
-	is_intro_playing = true
-	intro_skip_requested = false
-	get_tree().paused = true
+func _apply_custom_button_style(btn: Button, font_size: int = 20) -> void:
+	btn.add_theme_font_size_override("font_size", font_size)
+	if ui_button_texture != null:
+		btn.add_theme_color_override("font_color", Color(0.99, 0.96, 0.90, 1.0))
+		btn.add_theme_color_override("font_hover_color", Color(1.0, 0.98, 0.85, 1.0))
+		btn.add_theme_color_override("font_pressed_color", Color(0.90, 0.84, 0.72, 1.0))
+		btn.add_theme_constant_override("outline_size", 4)
+		btn.add_theme_color_override("font_outline_color", Color(0.14, 0.08, 0.04, 0.95))
+
+		var normal_sb := StyleBoxTexture.new()
+		normal_sb.texture = ui_button_texture
+		normal_sb.content_margin_left = 22
+		normal_sb.content_margin_right = 22
+		normal_sb.content_margin_top = 10
+		normal_sb.content_margin_bottom = 12
+
+		var hover_sb := normal_sb.duplicate() as StyleBoxTexture
+		hover_sb.modulate_color = Color(1.12, 1.08, 1.02, 1.0)
+
+		var pressed_sb := normal_sb.duplicate() as StyleBoxTexture
+		pressed_sb.modulate_color = Color(0.82, 0.78, 0.72, 1.0)
+
+		btn.add_theme_stylebox_override("normal", normal_sb)
+		btn.add_theme_stylebox_override("hover", hover_sb)
+		btn.add_theme_stylebox_override("focus", hover_sb)
+		btn.add_theme_stylebox_override("pressed", pressed_sb)
+	else:
+		var btn_normal := StyleBoxFlat.new()
+		btn_normal.bg_color = Color(0.45, 0.28, 0.16, 1.0)
+		btn_normal.set_corner_radius_all(8)
+		btn_normal.content_margin_left = 20
+		btn_normal.content_margin_right = 20
+		btn_normal.content_margin_top = 10
+		btn_normal.content_margin_bottom = 10
+
+		var btn_hover := btn_normal.duplicate() as StyleBoxFlat
+		btn_hover.bg_color = Color(0.58, 0.36, 0.20, 1.0)
+
+		btn.add_theme_stylebox_override("normal", btn_normal)
+		btn.add_theme_stylebox_override("hover", btn_hover)
+		btn.add_theme_stylebox_override("focus", btn_hover)
+		btn.add_theme_stylebox_override("pressed", btn_normal)
+
+func _setup_custom_hud() -> void:
+	var has_any_hud_tex := (
+		ui_antbar_texture != null or
+		ui_upgradebar_texture != null or
+		ui_resources_texture != null or
+		ui_warningboard_texture != null or
+		ui_button_texture != null
+	)
+	if not has_any_hud_tex:
+		return
+
+	if status_label != null:
+		status_label.visible = false
+
+	custom_hud_layer = CanvasLayer.new()
+	custom_hud_layer.name = "CustomHUDLayer"
+	custom_hud_layer.layer = 12
+	add_child(custom_hud_layer)
+
+	var root := Control.new()
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	custom_hud_layer.add_child(root)
+
+	var left_vbox := VBoxContainer.new()
+	left_vbox.position = Vector2(20, 16)
+	left_vbox.add_theme_constant_override("separation", 4)
+	left_vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(left_vbox)
+
+	var summary_panel := PanelContainer.new()
+	summary_panel.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	summary_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var sum_style := StyleBoxFlat.new()
+	sum_style.bg_color = Color(0.84, 0.79, 0.71, 0.94)
+	sum_style.border_color = Color(0.24, 0.16, 0.09, 1.0)
+	sum_style.set_border_width_all(3)
+	sum_style.set_corner_radius_all(10)
+	sum_style.content_margin_left = 14
+	sum_style.content_margin_right = 14
+	sum_style.content_margin_top = 6
+	sum_style.content_margin_bottom = 6
+	summary_panel.add_theme_stylebox_override("panel", sum_style)
+	left_vbox.add_child(summary_panel)
+
+	summary_strip_label = Label.new()
+	summary_strip_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	summary_strip_label.add_theme_font_size_override("font_size", 17)
+	summary_strip_label.add_theme_color_override("font_color", Color(0.16, 0.10, 0.06, 1.0))
+	summary_panel.add_child(summary_strip_label)
+
+	if ui_antbar_texture != null:
+		var ant_bar := TextureRect.new()
+		ant_bar.texture = ui_antbar_texture
+		ant_bar.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		ant_bar.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		ant_bar.custom_minimum_size = Vector2(240, 124)
+		ant_bar.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		ant_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		left_vbox.add_child(ant_bar)
+
+		ant_bar_label = Label.new()
+		ant_bar_label.anchor_left = 0.48
+		ant_bar_label.anchor_right = 0.92
+		ant_bar_label.anchor_top = 0.36
+		ant_bar_label.anchor_bottom = 0.64
+		ant_bar_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		ant_bar_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		ant_bar_label.add_theme_font_size_override("font_size", 20)
+		ant_bar_label.add_theme_color_override("font_color", Color(0.16, 0.10, 0.06, 1.0))
+		ant_bar.add_child(ant_bar_label)
+
+	if ui_upgradebar_texture != null:
+		var upg_bar := TextureRect.new()
+		upg_bar.texture = ui_upgradebar_texture
+		upg_bar.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		upg_bar.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		upg_bar.custom_minimum_size = Vector2(236, 94)
+		upg_bar.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		upg_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		left_vbox.add_child(upg_bar)
+
+		upgrade_bar_label = Label.new()
+		upgrade_bar_label.anchor_left = 0.28
+		upgrade_bar_label.anchor_right = 0.88
+		upgrade_bar_label.anchor_top = 0.35
+		upgrade_bar_label.anchor_bottom = 0.65
+		upgrade_bar_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		upgrade_bar_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		upgrade_bar_label.clip_text = true
+		upgrade_bar_label.add_theme_font_size_override("font_size", 15)
+		upgrade_bar_label.add_theme_color_override("font_color", Color(0.16, 0.10, 0.06, 1.0))
+		upg_bar.add_child(upgrade_bar_label)
+
+	if ui_resources_texture != null:
+		var res_grid := GridContainer.new()
+		res_grid.columns = 2
+		res_grid.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		res_grid.add_theme_constant_override("h_separation", 8)
+		res_grid.add_theme_constant_override("v_separation", 4)
+		res_grid.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		left_vbox.add_child(res_grid)
+
+		var tex_size := ui_resources_texture.get_size()
+
+		var res_layout: Array[Dictionary] = [
+			{"name": "Bread Crumb",   "rx": 0.020, "ry": 0.18, "rw": 0.330, "rh": 0.32, "lt": 0.35, "lb": 0.77},
+			{"name": "Water Droplet", "rx": 0.365, "ry": 0.18, "rw": 0.330, "rh": 0.32, "lt": 0.35, "lb": 0.77},
+			{"name": "Fruit Piece",   "rx": 0.365, "ry": 0.53, "rw": 0.330, "rh": 0.32, "lt": 0.26, "lb": 0.68},
+			{"name": "Sugar Cube",    "rx": 0.020, "ry": 0.53, "rw": 0.330, "rh": 0.32, "lt": 0.26, "lb": 0.68},
+			{"name": "Meat",          "rx": 0.692, "ry": 0.18, "rw": 0.305, "rh": 0.32, "lt": 0.35, "lb": 0.77}
+		]
+
+		for entry in res_layout:
+			var atlas := AtlasTexture.new()
+			atlas.atlas = ui_resources_texture
+			atlas.region = Rect2(
+				entry["rx"] * tex_size.x,
+				entry["ry"] * tex_size.y,
+				entry["rw"] * tex_size.x,
+				entry["rh"] * tex_size.y
+			)
+
+			var res_rect := TextureRect.new()
+			res_rect.texture = atlas
+			res_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			res_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			res_rect.custom_minimum_size = Vector2(146, 54)
+			res_rect.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+			res_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			res_grid.add_child(res_rect)
+
+			var count_lbl := Label.new()
+			count_lbl.text = "x0"
+			count_lbl.anchor_left = 0.42
+			count_lbl.anchor_right = 0.90
+			count_lbl.anchor_top = entry["lt"]
+			count_lbl.anchor_bottom = entry["lb"]
+			count_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			count_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			count_lbl.add_theme_font_size_override("font_size", 17)
+			count_lbl.add_theme_color_override("font_color", Color(0.16, 0.10, 0.06, 1.0))
+			res_rect.add_child(count_lbl)
+
+			resource_count_labels[entry["name"]] = count_lbl
+
+	var menu_btn := Button.new()
+	menu_btn.text = "MENU [ESC]"
+	menu_btn.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	menu_btn.offset_left = -185.0
+	menu_btn.offset_right = -20.0
+	menu_btn.offset_top = 18.0
+	menu_btn.offset_bottom = 72.0
+	menu_btn.focus_mode = Control.FOCUS_NONE
+	_apply_custom_button_style(menu_btn, 17)
+	menu_btn.pressed.connect(_toggle_pause_menu)
+	root.add_child(menu_btn)
+
+	if ui_warningboard_texture != null:
+		warning_board_rect = TextureRect.new()
+		warning_board_rect.texture = ui_warningboard_texture
+		warning_board_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		warning_board_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		warning_board_rect.set_anchors_preset(Control.PRESET_CENTER_TOP)
+		warning_board_rect.offset_left = -240.0
+		warning_board_rect.offset_right = 240.0
+		warning_board_rect.offset_top = 14.0
+		warning_board_rect.offset_bottom = 194.0
+		warning_board_rect.pivot_offset = Vector2(240.0, 90.0)
+		warning_board_rect.visible = false
+		warning_board_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		root.add_child(warning_board_rect)
+
+		warning_board_label = Label.new()
+		warning_board_label.anchor_left = 0.14
+		warning_board_label.anchor_right = 0.82
+		warning_board_label.anchor_top = 0.38
+		warning_board_label.anchor_bottom = 0.85
+		warning_board_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		warning_board_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		warning_board_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		warning_board_label.add_theme_font_size_override("font_size", 16)
+		warning_board_label.add_theme_color_override("font_color", Color(0.18, 0.10, 0.05, 1.0))
+		warning_board_rect.add_child(warning_board_label)
+
+func _setup_pause_menu() -> void:
+	pause_layer = CanvasLayer.new()
+	pause_layer.name = "PauseMenuLayer"
+	pause_layer.layer = 25
+	pause_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(pause_layer)
+
+	pause_root = Control.new()
+	pause_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	pause_root.visible = false
+	pause_layer.add_child(pause_root)
+
+	var backdrop := ColorRect.new()
+	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
+	backdrop.color = Color(0.05, 0.04, 0.03, 0.65)
+	pause_root.add_child(backdrop)
+
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	pause_root.add_child(center)
+
+	var menu_holder: Control
+	if ui_menubg_texture != null:
+		var bg_tex := TextureRect.new()
+		bg_tex.texture = ui_menubg_texture
+		bg_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		bg_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		bg_tex.custom_minimum_size = Vector2(430, 460)
+		center.add_child(bg_tex)
+		menu_holder = bg_tex
+	else:
+		var panel := PanelContainer.new()
+		panel.custom_minimum_size = Vector2(360, 320)
+		center.add_child(panel)
+		menu_holder = panel
+
+	var vbox := VBoxContainer.new()
+	vbox.anchor_left = 0.18
+	vbox.anchor_right = 0.82
+	vbox.anchor_top = 0.22
+	vbox.anchor_bottom = 0.82
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_theme_constant_override("separation", 18)
+	menu_holder.add_child(vbox)
+
+	var resume_btn := Button.new()
+	resume_btn.text = "RESUME"
+	resume_btn.custom_minimum_size = Vector2(220, 56)
+	resume_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_apply_custom_button_style(resume_btn, 21)
+	resume_btn.pressed.connect(_toggle_pause_menu)
+	vbox.add_child(resume_btn)
+
+	var restart_btn := Button.new()
+	restart_btn.text = "RESTART"
+	restart_btn.custom_minimum_size = Vector2(220, 56)
+	restart_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_apply_custom_button_style(restart_btn, 21)
+	restart_btn.pressed.connect(func() -> void:
+		get_tree().paused = false
+		_reload_game()
+	)
+	vbox.add_child(restart_btn)
+
+	var quit_btn := Button.new()
+	quit_btn.text = "QUIT"
+	quit_btn.custom_minimum_size = Vector2(220, 56)
+	quit_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_apply_custom_button_style(quit_btn, 21)
+	quit_btn.pressed.connect(func() -> void:
+		get_tree().quit()
+	)
+	vbox.add_child(quit_btn)
+
+func _toggle_pause_menu() -> void:
+	if is_story_playing or is_intro_playing or is_game_over or game_finished:
+		return
 
 	var audio := AudioManager.get_instance(get_tree())
-	var prev_audio_mode := Node.PROCESS_MODE_INHERIT
 	if audio != null:
-		prev_audio_mode = audio.process_mode
-		audio.process_mode = Node.PROCESS_MODE_ALWAYS
+		audio.play_button()
+
+	is_pause_open = not is_pause_open
+	pause_root.visible = is_pause_open
+	get_tree().paused = is_pause_open
+
+func _play_intro_map_sequence(audio: Node) -> void:
+	is_intro_playing = true
+	intro_skip_requested = false
 
 	var intro_layer := CanvasLayer.new()
 	intro_layer.name = "IntroMapLayer"
@@ -332,12 +701,7 @@ func _play_intro_map_sequence() -> void:
 	if is_instance_valid(intro_layer):
 		intro_layer.queue_free()
 
-	if audio != null and is_instance_valid(audio):
-		audio.process_mode = prev_audio_mode
-
 	is_intro_playing = false
-	get_tree().paused = false
-	_show_hud_alert("The wind blew your map away! Reach Ant Den 1!", 4.0)
 
 func _spawn_intro_wind_streaks(parent: Control, vp_size: Vector2) -> void:
 	for i in range(14):
@@ -357,6 +721,174 @@ func _spawn_intro_wind_streaks(parent: Control, vp_size: Vector2) -> void:
 		var dur := randf_range(0.45, 0.75)
 		tw.tween_property(streak, "position", Vector2(vp_size.x + 200.0, start_y - 260.0), dur).set_delay(delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 		tw.finished.connect(streak.queue_free)
+
+func _has_valid_story_slides() -> bool:
+	for tex in story_slides:
+		if tex != null:
+			return true
+	return false
+
+func _play_story_cutscene(audio: Node) -> void:
+	is_story_playing = true
+	story_skip_all_requested = false
+
+	var slides: Array[Dictionary] = []
+	for i in range(story_slides.size()):
+		if story_slides[i] != null:
+			var caption := story_captions[i] if i < story_captions.size() else ""
+			slides.append({
+				"texture": story_slides[i],
+				"caption": caption
+			})
+
+	if slides.is_empty():
+		is_story_playing = false
+		return
+
+	var story_layer := CanvasLayer.new()
+	story_layer.name = "OpeningStoryLayer"
+	story_layer.layer = 35
+	story_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(story_layer)
+
+	var root := Control.new()
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.focus_mode = Control.FOCUS_ALL
+	root.mouse_filter = Control.MOUSE_FILTER_STOP
+	story_layer.add_child(root)
+	root.grab_focus()
+
+	root.gui_input.connect(func(event: InputEvent) -> void:
+		if not allow_skip_story:
+			return
+		if event is InputEventKey and event.pressed and not event.echo:
+			if event.keycode in [KEY_SPACE, KEY_ENTER, KEY_KP_ENTER, KEY_RIGHT]:
+				story_next_requested = true
+				root.accept_event()
+			elif event.keycode == KEY_ESCAPE:
+				story_skip_all_requested = true
+				story_next_requested = true
+				root.accept_event()
+		elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+			story_next_requested = true
+			root.accept_event()
+	)
+
+	var bg := ColorRect.new()
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bg.color = Color(0.04, 0.03, 0.03, 1.0)
+	root.add_child(bg)
+
+	var vp_size := get_viewport().get_visible_rect().size
+
+	var slide_rect := TextureRect.new()
+	slide_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	slide_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	slide_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	slide_rect.size = vp_size
+	slide_rect.position = Vector2.ZERO
+	slide_rect.pivot_offset = vp_size * 0.5
+	slide_rect.modulate.a = 0.0
+	root.add_child(slide_rect)
+
+	var caption_panel := PanelContainer.new()
+	caption_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	caption_panel.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	caption_panel.offset_left = 120.0
+	caption_panel.offset_right = -120.0
+	caption_panel.offset_top = -132.0
+	caption_panel.offset_bottom = -44.0
+
+	var cap_style := StyleBoxFlat.new()
+	cap_style.bg_color = Color(0.06, 0.05, 0.04, 0.82)
+	cap_style.border_color = Color(0.75, 0.65, 0.45, 0.55)
+	cap_style.set_border_width_all(2)
+	cap_style.set_corner_radius_all(10)
+	cap_style.content_margin_left = 24
+	cap_style.content_margin_right = 24
+	cap_style.content_margin_top = 12
+	cap_style.content_margin_bottom = 12
+	caption_panel.add_theme_stylebox_override("panel", cap_style)
+	root.add_child(caption_panel)
+
+	var caption_label := Label.new()
+	caption_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	caption_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	caption_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	caption_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	caption_label.add_theme_font_size_override("font_size", 22)
+	caption_label.add_theme_color_override("font_color", Color(0.98, 0.94, 0.86, 1.0))
+	caption_panel.add_child(caption_label)
+
+	var hint_label := Label.new()
+	hint_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	hint_label.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	hint_label.offset_right = -28.0
+	hint_label.offset_top = -34.0
+	hint_label.offset_bottom = -10.0
+	hint_label.add_theme_font_size_override("font_size", 15)
+	hint_label.add_theme_color_override("font_color", Color(0.85, 0.80, 0.72, 0.78))
+	root.add_child(hint_label)
+
+	for idx in range(slides.size()):
+		if story_skip_all_requested or not is_inside_tree():
+			break
+
+		story_next_requested = false
+		var entry := slides[idx]
+		slide_rect.texture = entry["texture"]
+		slide_rect.scale = Vector2.ONE
+		slide_rect.modulate.a = 0.0
+
+		var cap_text: String = entry["caption"]
+		caption_panel.visible = cap_text.strip_edges() != ""
+		caption_label.text = cap_text
+		caption_panel.modulate.a = 0.0
+
+		if allow_skip_story:
+			hint_label.text = "(%d / %d)  [CLICK / SPACE] Next   |   [ESC] Skip" % [idx + 1, slides.size()]
+		else:
+			hint_label.text = "%d / %d" % [idx + 1, slides.size()]
+
+		var fade_in := story_layer.create_tween().set_parallel(true)
+		fade_in.tween_property(slide_rect, "modulate:a", 1.0, 0.4).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		if caption_panel.visible:
+			fade_in.tween_property(caption_panel, "modulate:a", 1.0, 0.4)
+		await fade_in.finished
+
+		var elapsed := 0.0
+		var dur := maxf(0.8, slide_duration)
+		while elapsed < dur and not story_next_requested and not story_skip_all_requested and is_inside_tree():
+			var dt := get_process_delta_time()
+			elapsed += dt
+			if not root.has_focus():
+				root.grab_focus()
+			var zoom := lerpf(1.0, 1.045, clampf(elapsed / dur, 0.0, 1.0))
+			slide_rect.scale = Vector2(zoom, zoom)
+			await get_tree().process_frame
+
+		if not is_inside_tree():
+			return
+
+		if story_next_requested and not story_skip_all_requested and audio != null:
+			audio.play_button()
+
+		var fade_out := story_layer.create_tween().set_parallel(true)
+		fade_out.tween_property(slide_rect, "modulate:a", 0.0, 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		if caption_panel.visible:
+			fade_out.tween_property(caption_panel, "modulate:a", 0.0, 0.25)
+		await fade_out.finished
+
+	if is_instance_valid(story_layer):
+		var end_tw := story_layer.create_tween()
+		end_tw.tween_property(bg, "color:a", 0.0, 0.35)
+		await end_tw.finished
+		if is_instance_valid(story_layer):
+			story_layer.queue_free()
+
+	is_story_playing = false
 
 func _setup_reload_screen() -> void:
 	reload_layer = CanvasLayer.new()
@@ -379,29 +911,48 @@ func _setup_reload_screen() -> void:
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	reload_root.add_child(center)
 
-	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(460, 0)
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.12, 0.08, 0.07, 0.94)
-	panel_style.border_color = Color(0.86, 0.26, 0.22, 0.95)
-	panel_style.set_border_width_all(3)
-	panel_style.set_corner_radius_all(14)
-	panel_style.content_margin_left = 32
-	panel_style.content_margin_right = 32
-	panel_style.content_margin_top = 28
-	panel_style.content_margin_bottom = 28
-	panel.add_theme_stylebox_override("panel", panel_style)
-	center.add_child(panel)
-
+	var container_node: Control
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 14)
-	panel.add_child(vbox)
+
+	if ui_menubg_texture != null:
+		var bg_tex := TextureRect.new()
+		bg_tex.texture = ui_menubg_texture
+		bg_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		bg_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		bg_tex.custom_minimum_size = Vector2(460, 480)
+		center.add_child(bg_tex)
+		container_node = bg_tex
+
+		vbox.anchor_left = 0.16
+		vbox.anchor_right = 0.84
+		vbox.anchor_top = 0.20
+		vbox.anchor_bottom = 0.84
+		vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+		container_node.add_child(vbox)
+	else:
+		var panel := PanelContainer.new()
+		panel.custom_minimum_size = Vector2(460, 0)
+		var panel_style := StyleBoxFlat.new()
+		panel_style.bg_color = Color(0.12, 0.08, 0.07, 0.94)
+		panel_style.border_color = Color(0.86, 0.26, 0.22, 0.95)
+		panel_style.set_border_width_all(3)
+		panel_style.set_corner_radius_all(14)
+		panel_style.content_margin_left = 32
+		panel_style.content_margin_right = 32
+		panel_style.content_margin_top = 28
+		panel_style.content_margin_bottom = 28
+		panel.add_theme_stylebox_override("panel", panel_style)
+		center.add_child(panel)
+		panel.add_child(vbox)
+
+	var text_col := Color(0.16, 0.10, 0.06, 1.0) if ui_menubg_texture != null else Color(0.95, 0.90, 0.85, 1.0)
 
 	reload_title_label = Label.new()
 	reload_title_label.text = "SQUAD FALLEN"
 	reload_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	reload_title_label.add_theme_font_size_override("font_size", 32)
-	reload_title_label.add_theme_color_override("font_color", Color(0.98, 0.34, 0.28, 1.0))
+	reload_title_label.add_theme_font_size_override("font_size", 28)
+	reload_title_label.add_theme_color_override("font_color", Color(0.82, 0.20, 0.16, 1.0))
 	vbox.add_child(reload_title_label)
 
 	reload_reason_label = Label.new()
@@ -409,7 +960,7 @@ func _setup_reload_screen() -> void:
 	reload_reason_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	reload_reason_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	reload_reason_label.add_theme_font_size_override("font_size", 17)
-	reload_reason_label.add_theme_color_override("font_color", Color(0.95, 0.90, 0.85, 1.0))
+	reload_reason_label.add_theme_color_override("font_color", text_col)
 	vbox.add_child(reload_reason_label)
 
 	var sep := HSeparator.new()
@@ -419,47 +970,18 @@ func _setup_reload_screen() -> void:
 	reload_stats_label.text = "Round: 1 / 3  |  Total Points: 0"
 	reload_stats_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	reload_stats_label.add_theme_font_size_override("font_size", 16)
-	reload_stats_label.add_theme_color_override("font_color", Color(0.98, 0.84, 0.42, 1.0))
+	reload_stats_label.add_theme_color_override("font_color", text_col)
 	vbox.add_child(reload_stats_label)
 
 	var spacer := Control.new()
-	spacer.custom_minimum_size = Vector2(0, 6)
+	spacer.custom_minimum_size = Vector2(0, 4)
 	vbox.add_child(spacer)
 
 	reload_button = Button.new()
 	reload_button.text = "Play Again [R]"
-	reload_button.custom_minimum_size = Vector2(240, 48)
+	reload_button.custom_minimum_size = Vector2(230, 54)
 	reload_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	reload_button.add_theme_font_size_override("font_size", 18)
-
-	var btn_normal := StyleBoxFlat.new()
-	btn_normal.bg_color = Color(0.76, 0.22, 0.18, 1.0)
-	btn_normal.set_corner_radius_all(8)
-	btn_normal.content_margin_left = 20
-	btn_normal.content_margin_right = 20
-	btn_normal.content_margin_top = 10
-	btn_normal.content_margin_bottom = 10
-
-	var btn_hover := StyleBoxFlat.new()
-	btn_hover.bg_color = Color(0.90, 0.28, 0.22, 1.0)
-	btn_hover.set_corner_radius_all(8)
-	btn_hover.content_margin_left = 20
-	btn_hover.content_margin_right = 20
-	btn_hover.content_margin_top = 10
-	btn_hover.content_margin_bottom = 10
-
-	var btn_pressed := StyleBoxFlat.new()
-	btn_pressed.bg_color = Color(0.56, 0.15, 0.12, 1.0)
-	btn_pressed.set_corner_radius_all(8)
-	btn_pressed.content_margin_left = 20
-	btn_pressed.content_margin_right = 20
-	btn_pressed.content_margin_top = 10
-	btn_pressed.content_margin_bottom = 10
-
-	reload_button.add_theme_stylebox_override("normal", btn_normal)
-	reload_button.add_theme_stylebox_override("hover", btn_hover)
-	reload_button.add_theme_stylebox_override("focus", btn_hover)
-	reload_button.add_theme_stylebox_override("pressed", btn_pressed)
+	_apply_custom_button_style(reload_button, 18)
 	reload_button.pressed.connect(_reload_game)
 	vbox.add_child(reload_button)
 
@@ -469,9 +991,9 @@ func _show_reload_screen(title_text: String, reason_text: String, is_victory: bo
 
 	reload_title_label.text = title_text
 	reload_reason_label.text = reason_text
-	reload_stats_label.text = "Round Reached: %d / %d  |  Total Points: %d" % [current_round, ant_dens.size(), total_points]
+	reload_stats_label.text = "Round Reached: %d / %d  |  Points: %d" % [current_round, ant_dens.size(), total_points]
 
-	var accent := Color(0.35, 0.92, 0.48, 1.0) if is_victory else Color(0.98, 0.34, 0.28, 1.0)
+	var accent := Color(0.18, 0.56, 0.22, 1.0) if is_victory else Color(0.82, 0.20, 0.16, 1.0)
 	reload_title_label.add_theme_color_override("font_color", accent)
 
 	reload_root.visible = true
@@ -540,8 +1062,10 @@ func _try_load_scene(paths: Array[String]) -> PackedScene:
 	return null
 
 func _unhandled_input(event: InputEvent) -> void:
-	if (is_game_over or game_finished) and event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_R:
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_ESCAPE and not is_story_playing and not is_intro_playing and not is_game_over and not game_finished:
+			_toggle_pause_menu()
+		elif (is_game_over or game_finished) and event.keycode == KEY_R:
 			_reload_game()
 
 func _on_fog_started_closing() -> void:
@@ -692,9 +1216,11 @@ func _on_den_reached(den: Area2D, leader_body: Node2D) -> void:
 		var upgrade_msg := ""
 		if leader_body.has_method("apply_random_upgrade"):
 			upgrade_msg = leader_body.apply_random_upgrade()
+		if upgrade_msg != "":
+			current_upgrade_text = upgrade_msg
 
 		_setup_round(current_round + 1)
-		_show_hud_alert("ROUND %d COMPLETE! (+%d Points)\nRandom Upgrade: %s" % [current_round - 1, earned_points, upgrade_msg], 5.0)
+		_show_hud_alert("ROUND %d COMPLETE! (+%d Points)\nUpgrade: %s" % [current_round - 1, earned_points, upgrade_msg], 5.0)
 	else:
 		game_finished = true
 		if closing_fog != null and closing_fog.has_method("stop"):
@@ -706,11 +1232,30 @@ func _show_hud_alert(msg: String, duration: float) -> void:
 	hud_alert_message = msg
 	_refresh_hud()
 
+	if warning_board_rect != null and warning_board_label != null:
+		warning_board_label.text = msg
+		warning_board_rect.visible = true
+		warning_board_rect.modulate.a = 0.0
+		warning_board_rect.scale = Vector2(0.85, 0.85)
+
+		if warning_tween != null and warning_tween.is_valid():
+			warning_tween.kill()
+
+		warning_tween = create_tween().set_parallel(true)
+		warning_tween.tween_property(warning_board_rect, "modulate:a", 1.0, 0.25)
+		warning_tween.tween_property(warning_board_rect, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
 	if duration < 900.0:
 		await get_tree().create_timer(duration).timeout
 		if hud_alert_message == msg:
 			hud_alert_message = ""
 			_refresh_hud()
+			if warning_board_rect != null and is_instance_valid(warning_board_rect):
+				var hide_tw := create_tween()
+				hide_tw.tween_property(warning_board_rect, "modulate:a", 0.0, 0.25)
+				await hide_tw.finished
+				if hud_alert_message == "" and is_instance_valid(warning_board_rect):
+					warning_board_rect.visible = false
 
 func _start_item_spawn_loop() -> void:
 	await get_tree().create_timer(initial_item_delay).timeout
@@ -956,16 +1501,52 @@ func _on_squad_updated(curr: int, max_f: int) -> void:
 	_refresh_hud()
 
 func _refresh_hud() -> void:
-	if status_label == null:
-		return
-	var warning := " [OVERWEIGHT -90% SPEED!]" if ui_overweight else ""
-	var alert_line := ("\n>>> %s <<<" % hud_alert_message) if hud_alert_message != "" else ""
-	status_label.text = (
-		"ROUND %d / %d  |  Points: %d\n" % [current_round, ant_dens.size(), total_points] +
-		"Follower Ants: %d / %d\n" % [ui_followers, ui_max_followers] +
-		"Capacity: %d / %d CC%s\n" % [ui_weight, ui_max_capacity, warning] +
-		"Food: %d / %d  |  Water: %d / %d%s" % [ui_food, food_quota, ui_water, water_quota, alert_line]
-	)
+	var warning := " [OVERWEIGHT!]" if ui_overweight else ""
+
+	if summary_strip_label != null:
+		summary_strip_label.text = (
+			"ROUND %d/%d  |  PTS: %d  |  FOOD: %d/%d  |  WATER: %d/%d  |  CAP: %d/%d%s" % [
+				current_round, ant_dens.size(), total_points,
+				ui_food, food_quota, ui_water, water_quota,
+				ui_weight, ui_max_capacity, warning
+			]
+		)
+
+	if ant_bar_label != null:
+		ant_bar_label.text = "%d / %d" % [ui_followers, ui_max_followers]
+
+	if upgrade_bar_label != null:
+		upgrade_bar_label.text = current_upgrade_text
+
+	if not resource_count_labels.is_empty():
+		var counts := {
+			"Bread Crumb": 0,
+			"Water Droplet": 0,
+			"Fruit Piece": 0,
+			"Sugar Cube": 0,
+			"Meat": 0
+		}
+		if leader != null:
+			var carried = leader.get("carried_items")
+			if carried != null:
+				for item in carried:
+					var item_name: String = item.get("name", "")
+					if counts.has(item_name):
+						counts[item_name] += 1
+
+		for key in resource_count_labels.keys():
+			var lbl: Label = resource_count_labels[key]
+			if lbl != null:
+				lbl.text = "x%d" % counts.get(key, 0)
+
+	if status_label != null and status_label.visible:
+		var alert_line := ("\n>>> %s <<<" % hud_alert_message) if hud_alert_message != "" else ""
+		status_label.text = (
+			"ROUND %d / %d  |  Points: %d\n" % [current_round, ant_dens.size(), total_points] +
+			"Follower Ants: %d / %d\n" % [ui_followers, ui_max_followers] +
+			"Capacity: %d / %d CC%s\n" % [ui_weight, ui_max_capacity, warning] +
+			"Food: %d / %d  |  Water: %d / %d%s" % [ui_food, food_quota, ui_water, water_quota, alert_line]
+		)
 
 func _start_hazard_loop() -> void:
 	await get_tree().create_timer(initial_hazard_delay).timeout

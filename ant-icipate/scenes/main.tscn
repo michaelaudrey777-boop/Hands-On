@@ -5,13 +5,24 @@
 [ext_resource type="PackedScene" uid="uid://bg748ng8nu5yn" path="res://scenes/ant_leader.tscn" id="1_o5qli"]
 [ext_resource type="PackedScene" uid="uid://daheniun45xih" path="res://scenes/ant_follower.tscn" id="2_muem4"]
 [ext_resource type="Texture2D" uid="uid://dsa5jx85n6vsl" path="res://assets/ui/map.png" id="3_bjg73"]
+[ext_resource type="Texture2D" uid="uid://bveytmaxgrfl" path="res://assets/cutscenes/1.png" id="3_dnhof"]
+[ext_resource type="Texture2D" uid="uid://br1irca0gl0p8" path="res://assets/ui/ui_antbar.png" id="3_e755i"]
+[ext_resource type="Texture2D" uid="uid://cuam2qbxkg5g5" path="res://assets/cutscenes/2.png" id="4_1v6qk"]
 [ext_resource type="Texture2D" uid="uid://iwdbbkys4v4y" path="res://assets/resources/resource_Bread.png" id="4_dp3eg"]
 [ext_resource type="PackedScene" uid="uid://dne3un4efkfjf" path="res://scenes/scavenge_item.tscn" id="4_jyhfs"]
+[ext_resource type="Texture2D" uid="uid://c4hwmuvmxg45n" path="res://assets/ui/ui_upgradebar.png" id="4_ro3en"]
 [ext_resource type="Texture2D" uid="uid://b572ul1fkj2wp" path="res://assets/resources/resource_Water.png" id="5_0ld40"]
+[ext_resource type="Texture2D" uid="uid://nabf1ojsmcvl" path="res://assets/cutscenes/3.png" id="5_augu2"]
 [ext_resource type="PackedScene" uid="uid://bbfpdth4335gp" path="res://scenes/hazard_hand.tscn" id="5_choun"]
+[ext_resource type="Texture2D" uid="uid://ci71hng6i2ijk" path="res://assets/ui/ui_resources.png" id="5_od4ux"]
 [ext_resource type="PackedScene" uid="uid://b7ktcttu0c236" path="res://scenes/ant_nest.tscn" id="5_tbgi4"]
 [ext_resource type="Texture2D" uid="uid://bnoogxgdhlvhk" path="res://assets/resources/resource_Fruit.png" id="6_gqmmt"]
+[ext_resource type="Texture2D" uid="uid://ccrr3uxqkd3d6" path="res://assets/cutscenes/4.png" id="6_tm6hj"]
+[ext_resource type="Texture2D" uid="uid://pqocajxu3fiw" path="res://assets/ui/ui_warningboard.png" id="6_xhfw6"]
+[ext_resource type="Texture2D" uid="uid://b20nvo6ou2fk3" path="res://assets/ui/ui_menubg.png" id="7_1epgm"]
+[ext_resource type="Texture2D" uid="uid://bwyltxia8hesi" path="res://assets/cutscenes/5.png" id="7_kf5aa"]
 [ext_resource type="Texture2D" uid="uid://coy7dx8mhwgsd" path="res://assets/resources/resource_Sugar.png" id="7_yc10j"]
+[ext_resource type="Texture2D" uid="uid://ccmxw8ugrk4r6" path="res://assets/ui/ui_button.png" id="8_152kg"]
 [ext_resource type="Texture2D" uid="uid://q0cltde4ss7l" path="res://assets/resources/resource_Meat1.png" id="8_jscy8"]
 [ext_resource type="Script" uid="uid://v5pbtmoomxu5" path="res://scripts/closing_fog.gd" id="8_tipki"]
 [ext_resource type="Texture2D" uid="uid://cpjtyiwwy1kix" path="res://assets/resources/resource_Meat2.png" id="9_pm3ni"]
@@ -230,6 +241,13 @@ size = Vector2(24400, 200)
 script = ExtResource("1_0wfyh")
 follower_scene = ExtResource("2_muem4")
 leader = NodePath("AntLeader")
+ui_antbar_texture = ExtResource("3_e755i")
+ui_upgradebar_texture = ExtResource("4_ro3en")
+ui_resources_texture = ExtResource("5_od4ux")
+ui_warningboard_texture = ExtResource("6_xhfw6")
+ui_menubg_texture = ExtResource("7_1epgm")
+ui_button_texture = ExtResource("8_152kg")
+story_slides = Array[Texture2D]([ExtResource("3_dnhof"), ExtResource("4_1v6qk"), ExtResource("5_augu2"), ExtResource("6_tm6hj"), ExtResource("7_kf5aa")])
 intro_map_texture = ExtResource("3_bjg73")
 intro_memorize_duration = 10.0
 ant_dens = [NodePath("AntDen1"), NodePath("AntDen2"), NodePath("AntDen3")]

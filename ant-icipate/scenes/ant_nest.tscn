@@ -1,7 +1,17 @@
 [gd_scene format=3 uid="uid://b7ktcttu0c236"]
 
 [ext_resource type="Script" uid="uid://tyg5ro3limeb" path="res://scripts/ant_nest.gd" id="1_7cyob"]
-[ext_resource type="Texture2D" uid="uid://d2rhl62u8luks" path="res://icon.svg" id="2_64ggm"]
+[ext_resource type="Texture2D" uid="uid://cl48itueom077" path="res://assets/den/nest.png" id="2_7cyob"]
+[ext_resource type="Shader" uid="uid://db7vwbxg2qm6u" path="res://shaders/den_shadow.gdshader" id="2_64ggm"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_64ggm"]
+shader = ExtResource("2_64ggm")
+shader_parameter/shadow_base_y = 0.8200000152
+shader_parameter/shadow_length = 0.6
+shader_parameter/shadow_skew = 0.3750000653125001
+shader_parameter/shadow_offset = Vector2(16, 10)
+shader_parameter/shadow_color = Color(0.08, 0.05, 0.03, 0.42)
+shader_parameter/shadow_softness = 2.5
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_68yga"]
 radius = 90.0
@@ -10,8 +20,10 @@ radius = 90.0
 script = ExtResource("1_7cyob")
 
 [node name="Sprite2D" type="Sprite2D" parent="." unique_id=2130641740]
+material = SubResource("ShaderMaterial_64ggm")
+position = Vector2(0, -35)
 scale = Vector2(1.5, 1.5)
-texture = ExtResource("2_64ggm")
+texture = ExtResource("2_7cyob")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=19768923]
 shape = SubResource("CircleShape2D_68yga")
