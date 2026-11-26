@@ -20,6 +20,11 @@ config/icon="res://icon.svg"
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 
+[gui]
+
+theme/custom="uid://bixm12byir6ij"
+theme/custom_font="uid://b33o58v706kbt"
+
 [input]
 
 Up={

@@ -15,6 +15,13 @@ enum FogDirection { FROM_LEFT, FROM_BOTTOM }
 @export var fog_color: Color = Color(0.07, 0.10, 0.08, 0.88)
 @export var fog_edge_color: Color = Color(0.16, 0.23, 0.19, 0.55)
 
+@export_group("Visual Sprites")
+@export var fog_textures: Array[Texture2D] = []
+@export var fog_sprite_scale: float = 1.0
+@export var fog_sprite_tint: Color = Color(1.0, 1.0, 1.0, 0.92)
+@export var fog_puff_spacing: float = 220.0
+@export var rotate_edge_on_side: bool = true
+
 var is_running: bool = false
 var is_closing: bool = false
 var elapsed_time: float = 0.0
@@ -145,6 +152,20 @@ func _apply_fog_damage(delta: float) -> void:
 		else:
 			leader.remove_follower(squad.back())
 
+func _get_valid_fog_textures() -> Array[Texture2D]:
+	var valid: Array[Texture2D] = []
+	for t in fog_textures:
+		if t != null:
+			valid.append(t)
+	return valid
+
+func _draw_fog_sprite(tex: Texture2D, pos: Vector2, rot_rad: float, scale_mult: float, flip_h: bool, tint: Color) -> void:
+	var scale_vec := Vector2(-scale_mult if flip_h else scale_mult, scale_mult)
+	draw_set_transform(pos, rot_rad, scale_vec)
+	var draw_size := tex.get_size() * fog_sprite_scale
+	draw_texture_rect(tex, Rect2(-draw_size * 0.5, draw_size), false, tint)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
 func _draw() -> void:
 	var fade := 1.0
 	if not is_closing:
@@ -153,27 +174,37 @@ func _draw() -> void:
 			return
 		fade = clampf((elapsed_time - warn_start) / maxf(0.1, warning_lead_time), 0.0, 1.0) * 0.45
 
+	var valid_textures := _get_valid_fog_textures()
+	var has_sprites := not valid_textures.is_empty()
+
 	var body_col := Color(fog_color.r, fog_color.g, fog_color.b, fog_color.a * fade)
 	var warn_col := Color(fog_edge_color.r, fog_edge_color.g, fog_edge_color.b, fog_edge_color.a * 0.55 * fade)
 	var puff_col := Color(fog_edge_color.r, fog_edge_color.g, fog_edge_color.b, fog_edge_color.a * fade)
+	var sprite_col := Color(fog_sprite_tint.r, fog_sprite_tint.g, fog_sprite_tint.b, fog_sprite_tint.a * fade)
 
 	if direction == FogDirection.FROM_BOTTOM:
 		var left_x := zone_min_x - 600.0
-		var right_x := zone_max_x
+		var right_x := zone_max_x + 600.0
 		var width := right_x - left_x
 		var bottom_y := zone_max_y + 800.0
-		var body_height := maxf(260.0, bottom_y - fog_front)
+		var body_start_y := fog_front + (80.0 if has_sprites else 0.0)
+		var body_height := maxf(260.0, bottom_y - body_start_y)
 
-		draw_rect(Rect2(Vector2(left_x, fog_front), Vector2(width, body_height)), body_col, true)
+		draw_rect(Rect2(Vector2(left_x, body_start_y), Vector2(width, body_height)), body_col, true)
 		draw_rect(Rect2(Vector2(left_x, fog_front - 180.0), Vector2(width, 180.0)), warn_col, true)
 
-		var step := 180.0
+		var step := fog_puff_spacing if has_sprites else 180.0
 		var x := left_x
 		var idx := 0
 		while x <= right_x:
-			var wave_y := sin(anim_time * 1.8 + float(idx) * 0.9) * 55.0
-			var puff_radius := 210.0 + cos(anim_time * 1.3 + float(idx) * 1.2) * 35.0
-			draw_circle(Vector2(x, fog_front + wave_y), puff_radius, puff_col)
+			var wave_y := sin(anim_time * 1.8 + float(idx) * 0.9) * 45.0
+			if has_sprites:
+				var tex := valid_textures[idx % valid_textures.size()]
+				var breathe := 1.0 + cos(anim_time * 1.3 + float(idx) * 1.2) * 0.08
+				_draw_fog_sprite(tex, Vector2(x, fog_front + wave_y), 0.0, breathe, idx % 2 == 1, sprite_col)
+			else:
+				var puff_radius := 210.0 + cos(anim_time * 1.3 + float(idx) * 1.2) * 35.0
+				draw_circle(Vector2(x, fog_front + wave_y), puff_radius, puff_col)
 			x += step
 			idx += 1
 	else:
@@ -181,17 +212,24 @@ func _draw() -> void:
 		var bottom_y := zone_max_y + 600.0
 		var height := bottom_y - top_y
 		var left_x := zone_min_x - 800.0
-		var body_width := maxf(260.0, fog_front - left_x)
+		var body_end_x := fog_front - (80.0 if has_sprites else 0.0)
+		var body_width := maxf(260.0, body_end_x - left_x)
 
-		draw_rect(Rect2(Vector2(fog_front - body_width, top_y), Vector2(body_width, height)), body_col, true)
+		draw_rect(Rect2(Vector2(body_end_x - body_width, top_y), Vector2(body_width, height)), body_col, true)
 		draw_rect(Rect2(Vector2(fog_front, top_y), Vector2(180.0, height)), warn_col, true)
 
-		var step := 180.0
+		var step := fog_puff_spacing if has_sprites else 180.0
 		var y := top_y
 		var idx := 0
+		var side_rot := (PI * 0.5) if rotate_edge_on_side else 0.0
 		while y <= bottom_y:
-			var wave_x := sin(anim_time * 1.8 + float(idx) * 0.9) * 55.0
-			var puff_radius := 210.0 + cos(anim_time * 1.3 + float(idx) * 1.2) * 35.0
-			draw_circle(Vector2(fog_front + wave_x, y), puff_radius, puff_col)
+			var wave_x := sin(anim_time * 1.8 + float(idx) * 0.9) * 45.0
+			if has_sprites:
+				var tex := valid_textures[idx % valid_textures.size()]
+				var breathe := 1.0 + cos(anim_time * 1.3 + float(idx) * 1.2) * 0.08
+				_draw_fog_sprite(tex, Vector2(fog_front + wave_x, y), side_rot, breathe, idx % 2 == 1, sprite_col)
+			else:
+				var puff_radius := 210.0 + cos(anim_time * 1.3 + float(idx) * 1.2) * 35.0
+				draw_circle(Vector2(fog_front + wave_x, y), puff_radius, puff_col)
 			y += step
 			idx += 1
