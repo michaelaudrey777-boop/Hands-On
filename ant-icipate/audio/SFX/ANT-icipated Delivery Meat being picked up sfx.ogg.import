@@ -1,0 +1,19 @@
+[remap]
+
+importer="oggvorbisstr"
+type="AudioStreamOggVorbis"
+uid="uid://drq3ke44psvqf"
+path="res://.godot/imported/ANT-icipated Delivery Meat being picked up sfx.ogg-72f4a54180815276386a0c39ee4eac31.oggvorbisstr"
+
+[deps]
+
+source_file="res://audio/SFX/ANT-icipated Delivery Meat being picked up sfx.ogg"
+dest_files=["res://.godot/imported/ANT-icipated Delivery Meat being picked up sfx.ogg-72f4a54180815276386a0c39ee4eac31.oggvorbisstr"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

@@ -1,0 +1,19 @@
+[remap]
+
+importer="oggvorbisstr"
+type="AudioStreamOggVorbis"
+uid="uid://wtqm325yrf41"
+path="res://.godot/imported/ANT-icipated Delivery Backyard Ambience.ogg-c1914f45a04dcdd6d2f925af26540cb4.oggvorbisstr"
+
+[deps]
+
+source_file="res://audio/SFX/ANT-icipated Delivery Backyard Ambience.ogg"
+dest_files=["res://.godot/imported/ANT-icipated Delivery Backyard Ambience.ogg-c1914f45a04dcdd6d2f925af26540cb4.oggvorbisstr"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

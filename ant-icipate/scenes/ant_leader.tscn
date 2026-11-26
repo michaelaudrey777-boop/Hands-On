@@ -65,8 +65,28 @@ radius = 31.06445
 
 [node name="Ant_leader" type="CharacterBody2D" unique_id=1506983490]
 script = ExtResource("1_ybn63")
+speed = null
+acceleration = null
+friction = null
+turn_acceleration = null
+huddle_speed_multiplier = null
+shadow_offset = null
 sprite_faces_left = true
 follower_scene = ExtResource("2_g8mh1")
+starting_followers = null
+max_followers = null
+capacity_per_ant = null
+include_leader_in_capacity = null
+screen_twitch_strength = null
+screen_twitch_decay = null
+screen_red_intensity = null
+screen_red_color = null
+stomp_shake_strength = null
+stomp_shake_decay = null
+stomp_max_range = null
+swipe_kick_distance = null
+swipe_tilt_degrees = null
+swipe_recover_speed = null
 
 [node name="Shadow" type="Sprite2D" parent="." unique_id=81208844]
 modulate = Color(0.14117648, 0.078431375, 0.05882353, 0.49019608)

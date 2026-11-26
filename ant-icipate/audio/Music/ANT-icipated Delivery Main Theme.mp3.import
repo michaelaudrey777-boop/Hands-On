@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://beq2p5ii3ujlj"
+path="res://.godot/imported/ANT-icipated Delivery Main Theme.mp3-b459227028c9f1b2b9e421ef9b4b3795.mp3str"
+
+[deps]
+
+source_file="res://audio/Music/ANT-icipated Delivery Main Theme.mp3"
+dest_files=["res://.godot/imported/ANT-icipated Delivery Main Theme.mp3-b459227028c9f1b2b9e421ef9b4b3795.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

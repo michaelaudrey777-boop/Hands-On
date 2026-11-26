@@ -32,6 +32,21 @@
 [ext_resource type="Texture2D" uid="uid://c1ehj038s7kqn" path="res://assets/background/rocks/256² rocks/rocks 4.png" id="25_qkpxi"]
 [ext_resource type="Texture2D" uid="uid://cv00kyjmasppq" path="res://assets/background/rocks/256² rocks/rocks 5.png" id="26_5q0nq"]
 [ext_resource type="Texture2D" uid="uid://c7dmpfgifgwa4" path="res://assets/background/rocks/256² rocks/rocks‎ 3.png" id="27_dgi5k"]
+[ext_resource type="Script" uid="uid://b4p8xx2mxhitr" path="res://scripts/audio_manager.gd" id="33_vc5cj"]
+[ext_resource type="AudioStream" uid="uid://beq2p5ii3ujlj" path="res://audio/Music/ANT-icipated Delivery Main Theme.mp3" id="34_nvyfr"]
+[ext_resource type="AudioStream" uid="uid://wtqm325yrf41" path="res://audio/SFX/ANT-icipated Delivery Backyard Ambience.ogg" id="35_ty1g6"]
+[ext_resource type="AudioStream" uid="uid://djuex1ggr35gl" path="res://audio/SFX/ANT-icipated Delivery Bread Crumb being picked up sfx.ogg" id="36_j2jfr"]
+[ext_resource type="AudioStream" uid="uid://crf50suy6bmo8" path="res://audio/SFX/ANT-icipated Delivery Water Droplet being picked up sfx.ogg" id="37_bjg73"]
+[ext_resource type="AudioStream" uid="uid://q3c71tffqye4" path="res://audio/SFX/ANT-icipated Delivery Fruit Slice being picked up sfx.ogg" id="38_bu4jf"]
+[ext_resource type="AudioStream" uid="uid://gp5pcu0xd0k6" path="res://audio/SFX/ANT-icipated Delivery Sugar Cube being picked up sfx.ogg" id="39_o7ddy"]
+[ext_resource type="AudioStream" uid="uid://drq3ke44psvqf" path="res://audio/SFX/ANT-icipated Delivery Meat being picked up sfx.ogg" id="40_0loja"]
+[ext_resource type="AudioStream" uid="uid://c3pmu1jiofuy6" path="res://audio/SFX/ANT-icipated Delivery Walking sfx.ogg" id="41_ids8r"]
+[ext_resource type="AudioStream" uid="uid://1gn7q0rs8ult" path="res://audio/SFX/ANT-icipated Delivery Getting Hit sfx.ogg" id="42_dnhof"]
+[ext_resource type="AudioStream" uid="uid://sxqeedd6osry" path="res://audio/SFX/ANT-icipated Delivery Badge sfx.ogg" id="43_1v6qk"]
+[ext_resource type="AudioStream" uid="uid://dte0bs71upeko" path="res://audio/SFX/ANT-icipated Delivery Button sfx.ogg" id="44_augu2"]
+[ext_resource type="AudioStream" uid="uid://cdsd003jdf6p8" path="res://audio/SFX/ANT-icipated Delivery Foot Stomp sfx.ogg" id="45_tm6hj"]
+[ext_resource type="AudioStream" uid="uid://dyj8cw6y71u7s" path="res://audio/SFX/ANT-icipated Delivery Hand Swoop sfx.ogg" id="46_kf5aa"]
+[ext_resource type="AudioStream" uid="uid://dvfrwhp5dgsvo" path="res://audio/SFX/ANT-icipated Delivery Map Blown Off sfx.ogg" id="47_t5ykj"]
 
 [sub_resource type="TileMapPattern" id="TileMapPattern_yc10j"]
 tile_data = PackedInt32Array(0, 9, 0, 1, 6, 0, 2, 8, 0, 3, 5, 0, 4, 7, 0)
@@ -317,5 +332,22 @@ position = Vector2(16550, 450)
 
 [node name="ClosingFog" type="Node2D" parent="." unique_id=1635107503]
 script = ExtResource("8_tipki")
+
+[node name="AudioManager" type="Node" parent="." unique_id=434376752]
+script = ExtResource("33_vc5cj")
+main_theme = ExtResource("34_nvyfr")
+backyard_ambience = ExtResource("35_ty1g6")
+bread_crumb_pickup = ExtResource("36_j2jfr")
+water_droplet_pickup = ExtResource("37_bjg73")
+fruit_slice_pickup = ExtResource("38_bu4jf")
+sugar_cube_pickup = ExtResource("39_o7ddy")
+meat_pickup = ExtResource("40_0loja")
+walking_sfx = ExtResource("41_ids8r")
+getting_hit_sfx = ExtResource("42_dnhof")
+badge_sfx = ExtResource("43_1v6qk")
+button_sfx = ExtResource("44_augu2")
+foot_stomp_sfx = ExtResource("45_tm6hj")
+hand_swoop_sfx = ExtResource("46_kf5aa")
+map_blown_off_sfx = ExtResource("47_t5ykj")
 
 [editable path="AntDen3"]
