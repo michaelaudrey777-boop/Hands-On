@@ -22,14 +22,8 @@ extends Node2D
 
 @export_group("Opening Story Cutscene")
 @export var story_slides: Array[Texture2D] = []
-@export_multiline var story_captions: Array[String] = [
-	"",
-	"",
-	"",
-	"",
-	""
-]
-@export var slide_duration: float = 3.5
+@export var text_reveal_speed: float = 36.0
+@export var auto_advance_dialogue: bool = true
 @export var allow_skip_story: bool = true
 
 @export_group("Intro Map Cutscene")
@@ -92,6 +86,53 @@ extends Node2D
 @export var initial_hand_delay: float = 12.0
 @export var round_hand_intervals: Array[float] = [16.0, 12.0, 8.5]
 @export var hand_interval_fallback: float = 9.0
+
+const STORY_SCRIPT: Array[Dictionary] = [
+	{
+		"motion": "colony_pan",
+		"fade_in": 0.55,
+		"hold_duration": 2.0,
+		"lines": [
+			"\"In the world of ants, everyone has a role, purpose, and everyone is expected to work together.\"",
+			"\"After all, that's how a colony is supposed to function\"",
+			"\"One day, there came a message from the queen.\""
+		]
+	},
+	{
+		"motion": "queen_fade",
+		"fade_in": 0.85,
+		"hold_duration": 2.0,
+		"lines": [
+			"\"It has been decided!\"",
+			"\"My fellow ants, for this important mission, a leader must be chosen!\"",
+			"\"The leader of the ants will be someone who has proven his place amongst the soldiers, who has immense experience, who is already resembling a leader!\""
+		]
+	},
+	{
+		"motion": "dramatic_zoom",
+		"fade_in": 0.12,
+		"hold_duration": 2.2,
+		"lines": [
+			"\"And that someone was me…\""
+		]
+	},
+	{
+		"motion": "hold_resolve",
+		"fade_in": 0.45,
+		"hold_duration": 2.0,
+		"lines": [
+			"\"Yes, I have been chosen to be the leader of this mission\"",
+			"\"The objective was simple: scout the path, gather supplies, avoid danger, and deliver everything safely.\"",
+			"\"Simple enough. Or so I thought.\""
+		]
+	},
+	{
+		"motion": "dramatic_departure",
+		"fade_in": 0.55,
+		"hold_duration": 3.4,
+		"lines": []
+	}
+]
 
 const ITEM_CATALOG: Array[Dictionary] = [
 	{
@@ -160,6 +201,8 @@ var is_story_playing: bool = false
 var is_intro_playing: bool = false
 var is_pause_open: bool = false
 var intro_skip_requested: bool = false
+var is_typing_line: bool = false
+var skip_typing_requested: bool = false
 var story_next_requested: bool = false
 var story_skip_all_requested: bool = false
 
@@ -521,10 +564,13 @@ func _setup_custom_hud() -> void:
 		ant_bar.texture = ui_antbar_texture
 		ant_bar.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		ant_bar.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		ant_bar.custom_minimum_size = Vector2(240, 124)
-		ant_bar.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		ant_bar.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+		ant_bar.offset_left = 20.0
+		ant_bar.offset_right = 260.0
+		ant_bar.offset_top = -134.0
+		ant_bar.offset_bottom = -16.0
 		ant_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		left_vbox.add_child(ant_bar)
+		root.add_child(ant_bar)
 
 		ant_bar_label = Label.new()
 		ant_bar_label.anchor_left = 0.48
@@ -572,8 +618,9 @@ func _setup_custom_hud() -> void:
 
 	if ui_resources_texture != null:
 		var res_grid := GridContainer.new()
-		res_grid.columns = 2
+		res_grid.columns = 1
 		res_grid.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		res_grid.add_theme_constant_override("h_separation", 8)
 		res_grid.add_theme_constant_override("v_separation", 2)
 		res_grid.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		left_vbox.add_child(res_grid)
@@ -615,7 +662,7 @@ func _setup_custom_hud() -> void:
 			count_lbl.anchor_bottom = entry["lb"]
 			count_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			count_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			count_lbl.add_theme_font_size_override("font_size", 16)
+			count_lbl.add_theme_font_size_override("font_size", 17)
 			count_lbl.add_theme_color_override("font_color", Color(0.16, 0.10, 0.06, 1.0))
 			res_rect.add_child(count_lbl)
 
@@ -987,16 +1034,25 @@ func _play_story_cutscene(audio: Node, title_layer: CanvasLayer = null) -> void:
 	is_story_playing = true
 	story_skip_all_requested = false
 
-	var slides: Array[Dictionary] = []
+	var beats: Array[Dictionary] = []
 	for i in range(story_slides.size()):
-		if story_slides[i] != null:
-			var caption := story_captions[i] if i < story_captions.size() else ""
-			slides.append({
-				"texture": story_slides[i],
-				"caption": caption
-			})
+		if story_slides[i] == null:
+			continue
+		var script_entry: Dictionary = STORY_SCRIPT[i] if i < STORY_SCRIPT.size() else {
+			"motion": "colony_pan",
+			"fade_in": 0.4,
+			"hold_duration": 2.5,
+			"lines": []
+		}
+		beats.append({
+			"texture": story_slides[i],
+			"motion": script_entry.get("motion", "colony_pan"),
+			"fade_in": script_entry.get("fade_in", 0.4),
+			"hold_duration": script_entry.get("hold_duration", 2.5),
+			"lines": script_entry.get("lines", [])
+		})
 
-	if slides.is_empty():
+	if beats.is_empty():
 		if title_layer != null and is_instance_valid(title_layer):
 			title_layer.queue_free()
 		is_story_playing = false
@@ -1030,14 +1086,21 @@ func _play_story_cutscene(audio: Node, title_layer: CanvasLayer = null) -> void:
 			return
 		if event is InputEventKey and event.pressed and not event.echo:
 			if event.keycode in [KEY_SPACE, KEY_ENTER, KEY_KP_ENTER, KEY_RIGHT]:
-				story_next_requested = true
+				if is_typing_line:
+					skip_typing_requested = true
+				else:
+					story_next_requested = true
 				root.accept_event()
 			elif event.keycode == KEY_ESCAPE:
 				story_skip_all_requested = true
+				skip_typing_requested = true
 				story_next_requested = true
 				root.accept_event()
 		elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-			story_next_requested = true
+			if is_typing_line:
+				skip_typing_requested = true
+			else:
+				story_next_requested = true
 			root.accept_event()
 	)
 
@@ -1053,98 +1116,202 @@ func _play_story_cutscene(audio: Node, title_layer: CanvasLayer = null) -> void:
 	slide_rect.modulate.a = 0.0
 	root.add_child(slide_rect)
 
-	var caption_panel := PanelContainer.new()
-	caption_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	caption_panel.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	caption_panel.offset_left = 120.0
-	caption_panel.offset_right = -120.0
-	caption_panel.offset_top = -132.0
-	caption_panel.offset_bottom = -44.0
+	var dialogue_panel := PanelContainer.new()
+	dialogue_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	dialogue_panel.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	dialogue_panel.offset_left = 110.0
+	dialogue_panel.offset_right = -110.0
+	dialogue_panel.offset_top = -164.0
+	dialogue_panel.offset_bottom = -50.0
+	dialogue_panel.visible = false
 
 	var cap_style := StyleBoxFlat.new()
-	cap_style.bg_color = Color(0.06, 0.05, 0.04, 0.82)
-	cap_style.border_color = Color(0.75, 0.65, 0.45, 0.55)
-	cap_style.set_border_width_all(2)
-	cap_style.set_corner_radius_all(10)
-	cap_style.content_margin_left = 24
-	cap_style.content_margin_right = 24
-	cap_style.content_margin_top = 12
-	cap_style.content_margin_bottom = 12
-	caption_panel.add_theme_stylebox_override("panel", cap_style)
-	root.add_child(caption_panel)
+	cap_style.bg_color = Color(0.08, 0.06, 0.04, 0.88)
+	cap_style.border_color = Color(0.82, 0.70, 0.46, 0.80)
+	cap_style.set_border_width_all(3)
+	cap_style.set_corner_radius_all(12)
+	cap_style.content_margin_left = 28
+	cap_style.content_margin_right = 28
+	cap_style.content_margin_top = 14
+	cap_style.content_margin_bottom = 14
+	dialogue_panel.add_theme_stylebox_override("panel", cap_style)
+	root.add_child(dialogue_panel)
 
-	var caption_label := Label.new()
-	caption_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	caption_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	caption_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	caption_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	caption_label.add_theme_font_size_override("font_size", 22)
-	caption_label.add_theme_color_override("font_color", Color(0.98, 0.94, 0.86, 1.0))
-	caption_panel.add_child(caption_label)
+	var dialogue_label := Label.new()
+	dialogue_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	dialogue_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	dialogue_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	dialogue_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	dialogue_label.add_theme_font_size_override("font_size", 22)
+	dialogue_label.add_theme_color_override("font_color", Color(0.99, 0.95, 0.88, 1.0))
+	dialogue_panel.add_child(dialogue_label)
+
+	var hint_panel := PanelContainer.new()
+	hint_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hint_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	hint_panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	hint_panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	hint_panel.offset_right = -22.0
+	hint_panel.offset_bottom = -10.0
+
+	var hint_style := StyleBoxFlat.new()
+	hint_style.bg_color = Color(0.05, 0.04, 0.03, 0.90)
+	hint_style.border_color = Color(0.82, 0.70, 0.46, 0.75)
+	hint_style.set_border_width_all(2)
+	hint_style.set_corner_radius_all(8)
+	hint_style.content_margin_left = 14
+	hint_style.content_margin_right = 14
+	hint_style.content_margin_top = 4
+	hint_style.content_margin_bottom = 4
+	hint_panel.add_theme_stylebox_override("panel", hint_style)
+	root.add_child(hint_panel)
 
 	var hint_label := Label.new()
 	hint_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	hint_label.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	hint_label.offset_right = -28.0
-	hint_label.offset_top = -34.0
-	hint_label.offset_bottom = -10.0
 	hint_label.add_theme_font_size_override("font_size", 15)
-	hint_label.add_theme_color_override("font_color", Color(0.85, 0.80, 0.72, 0.78))
-	root.add_child(hint_label)
+	hint_label.add_theme_color_override("font_color", Color(1.0, 0.96, 0.86, 1.0))
+	hint_label.add_theme_constant_override("outline_size", 4)
+	hint_label.add_theme_color_override("font_outline_color", Color(0.04, 0.03, 0.02, 1.0))
+	hint_panel.add_child(hint_label)
 
-	for idx in range(slides.size()):
+	for idx in range(beats.size()):
 		if story_skip_all_requested or not is_inside_tree():
 			break
 
-		story_next_requested = false
-		var entry := slides[idx]
-		slide_rect.texture = entry["texture"]
-		slide_rect.scale = Vector2.ONE
+		var beat: Dictionary = beats[idx]
+		var motion: String = beat["motion"]
+		var fade_in_dur: float = beat["fade_in"]
+		var lines: Array = beat["lines"]
+
+		slide_rect.texture = beat["texture"]
+		slide_rect.position = Vector2.ZERO
 		slide_rect.modulate.a = 0.0
 
-		var cap_text: String = entry["caption"]
-		caption_panel.visible = cap_text.strip_edges() != ""
-		caption_label.text = cap_text
-		caption_panel.modulate.a = 0.0
+		var start_scale := Vector2.ONE
+		var end_scale := Vector2(1.045, 1.045)
+		match motion:
+			"dramatic_zoom":
+				start_scale = Vector2(1.0, 1.0)
+				end_scale = Vector2(1.22, 1.22)
+			"hold_resolve":
+				start_scale = Vector2(1.08, 1.08)
+				end_scale = Vector2(1.0, 1.0)
+			"dramatic_departure":
+				start_scale = Vector2(1.06, 1.06)
+				end_scale = Vector2(1.0, 1.0)
+
+		slide_rect.scale = start_scale
+		dialogue_panel.visible = false
+		dialogue_label.text = ""
 
 		if allow_skip_story:
-			hint_label.text = "(%d / %d)  [CLICK / SPACE] Next   |   [ESC] Skip" % [idx + 1, slides.size()]
+			hint_label.text = "Scene %d / %d  |  [CLICK / SPACE] Continue   |   [ESC] Skip Intro" % [idx + 1, beats.size()]
 		else:
-			hint_label.text = "%d / %d" % [idx + 1, slides.size()]
+			hint_label.text = "Scene %d / %d" % [idx + 1, beats.size()]
 
-		var fade_in := story_layer.create_tween().set_parallel(true)
-		fade_in.tween_property(slide_rect, "modulate:a", 1.0, 0.4).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-		if caption_panel.visible:
-			fade_in.tween_property(caption_panel, "modulate:a", 1.0, 0.4)
+		var fade_in := story_layer.create_tween()
+		fade_in.tween_property(slide_rect, "modulate:a", 1.0, fade_in_dur).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		await fade_in.finished
 
-		var elapsed := 0.0
-		var dur := maxf(0.8, slide_duration)
-		while elapsed < dur and not story_next_requested and not story_skip_all_requested and is_inside_tree():
-			var dt := get_process_delta_time()
-			elapsed += dt
-			if not root.has_focus():
-				root.grab_focus()
-			var zoom := lerpf(1.0, 1.045, clampf(elapsed / dur, 0.0, 1.0))
-			slide_rect.scale = Vector2(zoom, zoom)
-			await get_tree().process_frame
+		if story_skip_all_requested or not is_inside_tree():
+			break
+
+		var scene_elapsed := 0.0
+		var est_total_dur := maxf(2.5, float(lines.size()) * 3.2) if not lines.is_empty() else float(beat["hold_duration"])
+
+		if lines.is_empty():
+			story_next_requested = false
+			var hold_dur: float = beat["hold_duration"]
+			while scene_elapsed < hold_dur and not story_next_requested and not story_skip_all_requested and is_inside_tree():
+				var dt := get_process_delta_time()
+				scene_elapsed += dt
+				if not root.has_focus():
+					root.grab_focus()
+				var t := clampf(scene_elapsed / hold_dur, 0.0, 1.0)
+				slide_rect.scale = start_scale.lerp(end_scale, t)
+				await get_tree().process_frame
+		else:
+			dialogue_panel.visible = true
+			dialogue_panel.modulate.a = 0.0
+			var box_in := story_layer.create_tween()
+			box_in.tween_property(dialogue_panel, "modulate:a", 1.0, 0.22)
+			await box_in.finished
+
+			for line_idx in range(lines.size()):
+				if story_skip_all_requested or not is_inside_tree():
+					break
+
+				var full_line: String = str(lines[line_idx])
+				is_typing_line = true
+				skip_typing_requested = false
+				story_next_requested = false
+				dialogue_label.text = ""
+
+				var char_progress := 0.0
+				var speed := maxf(15.0, text_reveal_speed)
+				while is_typing_line and not skip_typing_requested and not story_skip_all_requested and is_inside_tree():
+					var dt := get_process_delta_time()
+					scene_elapsed += dt
+					char_progress += dt * speed
+					if not root.has_focus():
+						root.grab_focus()
+
+					var cam_t := clampf(scene_elapsed / est_total_dur, 0.0, 1.0)
+					slide_rect.scale = start_scale.lerp(end_scale, cam_t)
+
+					if motion == "dramatic_zoom" and scene_elapsed < 0.45:
+						var shake_amp := (1.0 - (scene_elapsed / 0.45)) * 7.0
+						slide_rect.position = Vector2(randf_range(-shake_amp, shake_amp), randf_range(-shake_amp, shake_amp))
+					else:
+						slide_rect.position = Vector2.ZERO
+
+					var visible_chars := mini(int(char_progress), full_line.length())
+					dialogue_label.text = full_line.substr(0, visible_chars)
+					if visible_chars >= full_line.length():
+						is_typing_line = false
+
+					await get_tree().process_frame
+
+				is_typing_line = false
+				dialogue_label.text = full_line
+				slide_rect.position = Vector2.ZERO
+
+				if story_skip_all_requested or not is_inside_tree():
+					break
+
+				var read_wait := clampf(1.8 + float(full_line.length()) * 0.032, 2.2, 4.8)
+				var wait_elapsed := 0.0
+				while not story_next_requested and not story_skip_all_requested and is_inside_tree():
+					var dt := get_process_delta_time()
+					scene_elapsed += dt
+					wait_elapsed += dt
+					if not root.has_focus():
+						root.grab_focus()
+
+					var cam_t := clampf(scene_elapsed / est_total_dur, 0.0, 1.0)
+					slide_rect.scale = start_scale.lerp(end_scale, cam_t)
+
+					if auto_advance_dialogue and wait_elapsed >= read_wait:
+						break
+
+					await get_tree().process_frame
+
+				if story_next_requested and not story_skip_all_requested and audio != null:
+					audio.play_button()
 
 		if not is_inside_tree():
 			return
 
-		if story_next_requested and not story_skip_all_requested and audio != null:
-			audio.play_button()
-
 		var fade_out := story_layer.create_tween().set_parallel(true)
-		fade_out.tween_property(slide_rect, "modulate:a", 0.0, 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-		if caption_panel.visible:
-			fade_out.tween_property(caption_panel, "modulate:a", 0.0, 0.25)
+		fade_out.tween_property(slide_rect, "modulate:a", 0.0, 0.35).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		if dialogue_panel.visible:
+			fade_out.tween_property(dialogue_panel, "modulate:a", 0.0, 0.25)
 		await fade_out.finished
 
 	if is_instance_valid(story_layer):
 		var end_tw := story_layer.create_tween()
-		end_tw.tween_property(bg, "color:a", 0.0, 0.35)
+		end_tw.tween_property(bg, "color:a", 0.0, 0.4)
 		await end_tw.finished
 		if is_instance_valid(story_layer):
 			story_layer.queue_free()
