@@ -845,24 +845,42 @@ func _spawn_hand() -> void:
 	add_child(hand)
 
 func _get_hand_position() -> Vector2:
-	var candidates: Array[Vector2] = []
+	var ant_targets: Array[Vector2] = []
 	if not _is_invalid_hazard_pos(leader.global_position):
-		candidates.append(leader.global_position)
+		ant_targets.append(leader.global_position)
 
 	var squad: Array = leader.get("followers")
 	for f in squad:
 		if is_instance_valid(f) and not _is_invalid_hazard_pos(f.global_position):
-			candidates.append(f.global_position)
+			ant_targets.append(f.global_position)
 
-	if candidates.is_empty():
-		return Vector2.INF
+	var item_targets: Array[Vector2] = []
+	for item in get_tree().get_nodes_in_group("items"):
+		if is_instance_valid(item) and not _is_invalid_hazard_pos(item.global_position):
+			if item.global_position.distance_to(leader.global_position) <= hazard_spawn_range:
+				item_targets.append(item.global_position)
 
+	if randf() < target_ants_chance and not ant_targets.is_empty():
+		var ant_pos := _pick_hand_offset(ant_targets)
+		if ant_pos != Vector2.INF:
+			return ant_pos
+
+	if not item_targets.is_empty():
+		var item_pos := _pick_hand_offset(item_targets)
+		if item_pos != Vector2.INF:
+			return item_pos
+
+	if not ant_targets.is_empty():
+		return _pick_hand_offset(ant_targets)
+
+	return Vector2.INF
+
+func _pick_hand_offset(bases: Array[Vector2]) -> Vector2:
 	for i in range(12):
-		var base: Vector2 = candidates.pick_random()
+		var base: Vector2 = bases.pick_random()
 		var pos := base + Vector2(randf_range(-140.0, 140.0), randf_range(-55.0, 55.0))
 		if not _is_invalid_hazard_pos(pos):
 			return pos
-
 	return Vector2.INF
 
 func _is_invalid_hazard_pos(pos: Vector2) -> bool:
